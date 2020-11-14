@@ -14,10 +14,7 @@
 #include <iomanip>
 #include <map>
 
-integrity_validation::integrity_validation()
-{
-
-};
+integrity_validation::integrity_validation()= default;
 
 std::string integrity_validation::get_SHA1(const std::string& path_to_file)
 {

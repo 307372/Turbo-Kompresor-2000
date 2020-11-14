@@ -27,6 +27,14 @@ add_executable(Turbo-Kompresor-2000
   statistical_tools.h
   integrity_validation.cpp
   integrity_validation.h
+  archive.h
+  archive.cpp
+  notcompression.h
+  notcompression.cpp
+  archive_structures.h
+  archive_structures.cpp
+  project_exceptions.h
+  project_exceptions.cpp
 )
 
 target_link_libraries(Turbo-Kompresor-2000 PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)

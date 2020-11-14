@@ -10,10 +10,12 @@
 
 statistical_tools::statistical_tools( std::string absolute_path_to_file )
 {
-    this->r = {};
+    for (auto &i : this->r) i = 0;
     this->alphabet = "";
-    this->target_file.open(absolute_path_to_file);
+    this->target_file.open( absolute_path_to_file );
+    this->file_size = std::filesystem::file_size( absolute_path_to_file );
     this->max = UINT_MAX;
+    this->entropy = 0;
 }
 
 statistical_tools::~statistical_tools()
@@ -21,7 +23,7 @@ statistical_tools::~statistical_tools()
     if (this->target_file.is_open())
         this->target_file.close();
 }
-
+/*
 void statistical_tools::iid_model()
 {
     //Produces statistical data compatible with my arithmetic coding implementation
@@ -68,7 +70,8 @@ void statistical_tools::iid_model()
 
     }
 }
-
+*/
+/*
 void statistical_tools::iid_model_chunks( size_t buffer_size )
 {
     //Produces statistical data compatible with my arithmetic coding implementation.
@@ -92,7 +95,6 @@ void statistical_tools::iid_model_chunks( size_t buffer_size )
 
 
         //auto stop = std::chrono::high_resolution_clock::now();
-        this->file_size = sum; // file size in bytes
 
         unsigned long long rsum = 0;
         unsigned long long rn = 0;
@@ -119,6 +121,48 @@ void statistical_tools::iid_model_chunks( size_t buffer_size )
     else
         assert( this->target_file.is_open() );
 }
+*/
+void statistical_tools::iid_model_chunksV2(size_t buffer_size) {
+    //Produces statistical data compatible with my arithmetic coding implementation.
+    //It reads the file in chunks until EOF.
+
+    assert( this->target_file.is_open() );
+
+    uint8_t buffer[buffer_size]; //reads only buffer_size bytes at a time
+
+    while (!this->target_file.eof()) {
+        this->target_file.read((char *) buffer, buffer_size);
+        std::streamsize dataSize = this->target_file.gcount();
+        for (uint64_t i = 0; i < dataSize; i++) this->r[buffer[i]]++;
+    }
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    for (uint32_t i = 0; i <= UCHAR_MAX; i++) {
+        r[i] *= this->max;
+        r[i] /= this->file_size;
+    }
+
+    uint64_t rsum2 = std::accumulate(r, r + 256, 0ull);
+    if (rsum2 > this->max) {
+        *std::max_element(std::begin(r), std::end(r)) -= rsum2 - this->max;
+        rsum2 = this->max;
+    } else if (rsum2 < this->max) {
+        *std::max_element(std::begin(r), std::end(r)) += this->max - rsum2;
+        rsum2 = this->max;
+    }
+
+    assert(rsum2 == this->max);
+
+    // for (auto i : r) std::cout << i << std::endl;
+
+    // auto stop = std::chrono::high_resolution_clock::now();
+    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+    // std::cout << std::endl << "duration: " << duration.count() << " microseconds\n";
+
+
+}
+
 
 void statistical_tools::get_entropy()
 {
