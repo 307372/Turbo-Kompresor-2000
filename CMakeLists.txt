@@ -35,6 +35,7 @@ add_executable(Turbo-Kompresor-2000
   archive_structures.cpp
   project_exceptions.h
   project_exceptions.cpp
+  resources.qrc
 )
 
 target_link_libraries(Turbo-Kompresor-2000 PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)

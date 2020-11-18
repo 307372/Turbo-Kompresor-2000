@@ -35,6 +35,8 @@ Thumbs.db
 /.qmake.cache
 /.qmake.stash
 /backup
+/testtext
+/silesia
 
 # qtcreator generated files
 *.pro.user*
@@ -72,4 +74,4 @@ Thumbs.db
 *.dll
 *.exe
 CMakeLists.txt.user
-silesia
+*.tk2k

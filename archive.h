@@ -17,10 +17,13 @@ public:
     ~archive();
 
     // Size of buffer used while reading/writing files
-    const uint32_t buffer_size = 8 * 1024;
+    uint32_t buffer_size = 8 * 1024;
 
     // Extension of created archives
-    const std::string extension= ".tk2k";
+    std::string extension= ".tk2k";
+
+    // Path that was used to load the file (if it was loaded)
+    std::filesystem::path load_path;
 
     // Root folder of archive
     std::unique_ptr<folder> archive_dir;
@@ -35,10 +38,16 @@ public:
     void save( const std::string& path_to_file );
 
     // Loads archive from file
-    void load(const std::string& path_to_file );
+    void load( const std::string& path_to_file );
 
     // Creates empty archive, needs to happen before adding files
-    void build_empty_archive( std::string archive_name) const;
+    void build_empty_archive() const;
+
+    // Finds and returns pointer to unique_ptr to file
+    std::unique_ptr<file>* find_file_in_archive( folder* parent, file* wanted_file );
+
+    // Finds and returns pointer to unique_ptr to folder
+    std::unique_ptr<folder>* find_folder_in_archive( folder* parent, folder* wanted_folder );
 
     // Unpacks whole archive to path_to_dir
     void unpack_whole_archive( const std::string& path_to_directory, std::fstream &os );
@@ -48,6 +57,8 @@ public:
 
     // Adds folder to archive's model, and returns pointer to unique pointer to it for future use
     static std::unique_ptr<folder>* add_folder_to_model( std::unique_ptr<folder> &parent_dir, const std::string& folder_name );
+
+    void add_file_to_archive_model(folder& parent_dir, const std::string& path_to_file, uint16_t& flags );
 
     // Prints whole archive's useful data onto console
     void recursive_print() const;
