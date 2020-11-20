@@ -36,22 +36,27 @@ void archive::load(const std::string& path_to_file )
 {
     this->load_path = std::filesystem::path( path_to_file );
 
-    this->archive_file.open( path_to_file, std::ios::binary | std::ios::in );
+    this->archive_file.open( path_to_file, std::ios::binary | std::ios::in | std::ios::out );
     assert( this->archive_file.is_open() );
 
     this->archive_file.seekg( 1 );
     this->archive_dir->parse( this->archive_file, 1, nullptr, this->archive_dir );
-
 }
+
 
 void archive::build_empty_archive() const
 {
-    this->archive_dir->name = "root";
+    this->archive_dir->name = "new_archive" + this->extension;
     this->archive_dir->name_length = this->archive_dir->name.length();
     this->archive_dir->location = 1;
 }
 
-
+void archive::build_empty_archive( std::string archive_name )
+{
+    this->archive_dir->name = archive_name;
+    this->archive_dir->name_length = this->archive_dir->name.length();
+    this->archive_dir->location = 1;
+}
 
 std::unique_ptr<file>* find_file_in_archive( folder* parent, file* wanted_file ) {
     if ( parent->child_file_ptr.get() == wanted_file ) return &(parent->child_file_ptr);
@@ -116,6 +121,29 @@ std::unique_ptr<folder>* archive::add_folder_to_model( std::unique_ptr<folder> &
     return pointer_to_be_returned;
 }
 
+folder* archive::add_folder_to_model( folder* parent_dir, std::string folder_name ) {
+
+    folder* added_folder = nullptr;
+    std::unique_ptr<folder> *pointer_to_be_returned = nullptr;
+    if (parent_dir->child_dir_ptr == nullptr) {
+        parent_dir->child_dir_ptr = std::make_unique<folder>( parent_dir, folder_name );
+        added_folder = parent_dir->child_dir_ptr.get();
+        pointer_to_be_returned = &(parent_dir->child_dir_ptr);
+    }
+    else {
+        folder* previous_folder = parent_dir->child_dir_ptr.get();
+        while( previous_folder->sibling_ptr != nullptr )
+        {
+            previous_folder = previous_folder->sibling_ptr.get();
+        }
+        previous_folder->sibling_ptr = std::make_unique<folder>( parent_dir, folder_name );
+        added_folder = previous_folder->sibling_ptr.get();
+        pointer_to_be_returned = &(previous_folder->sibling_ptr);
+    }
+
+    return pointer_to_be_returned->get();
+}
+
 void archive::add_file_to_archive_model(std::unique_ptr<folder>& parent_dir, const std::string& path_to_file, uint16_t& flags )
 {
     std::filesystem::path std_path( path_to_file );
@@ -156,7 +184,7 @@ void archive::add_file_to_archive_model(std::unique_ptr<folder>& parent_dir, con
 
 }
 
-void archive::add_file_to_archive_model(folder &parent_dir, const std::string& path_to_file, uint16_t& flags )
+file* archive::add_file_to_archive_model(folder &parent_dir, const std::string& path_to_file, uint16_t& flags )
 {
     std::filesystem::path std_path( path_to_file );
     std::unique_ptr<file> new_file = std::make_unique<file>();
@@ -194,6 +222,7 @@ void archive::add_file_to_archive_model(folder &parent_dir, const std::string& p
     ptr_new_file->compressed_size=0; // will be determined after compression
     ptr_new_file->uncompressed_size = std::filesystem::file_size( std_path );
 
+    return ptr_new_file;
 }
 
 void archive::recursive_print() const {

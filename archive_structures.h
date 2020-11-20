@@ -8,6 +8,8 @@
 #include <filesystem>
 #include <iostream>
 #include <bitset>
+#include <utility>
+
 #include "arithmetic_coding.h"
 #include "notcompression.h"
 #include "project_exceptions.h"
@@ -25,6 +27,8 @@ struct folder
 
     folder* parent_ptr = nullptr;                   // ptr to parent folder in memory
 
+    bool alreadySaved = false;                      // true - file has already been saved to archive, false - it's only in the model
+
     std::unique_ptr<folder> child_dir_ptr=nullptr;  // ptr to first subfolder in memory
 
     std::unique_ptr<folder> sibling_ptr=nullptr;    // ptr to next sibling folder in memory
@@ -32,6 +36,8 @@ struct folder
     std::unique_ptr<file> child_file_ptr=nullptr;   // ptr to first file in memory
 
     folder( std::unique_ptr<folder> &parent, std::string folder_name );
+    folder( folder* parent, std::string folder_name );
+    folder();
 
     void recursive_print(std::ostream &os) const;
 
@@ -39,11 +45,13 @@ struct folder
 
     void parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_ptr<folder> &shared_this  );
 
+    void append_to_archive( std::fstream& archive_file );
+
     void write_to_archive( std::fstream &archive_file );
 
     void unpack( const std::filesystem::path& target_path, std::fstream &os, bool unpack_all ) const;
 
-    folder();
+
 
 };
 
@@ -57,6 +65,8 @@ struct file
     std::string name;                               // folder's name
 
     folder* parent_ptr = nullptr;                   // ptr to parent folder in memory
+
+    bool alreadySaved = false;                      // true - file has already been saved to archive, false - it's only in the model
 
     std::unique_ptr<file> sibling_ptr=nullptr;      // ptr to next sibling file in memory
 
@@ -73,6 +83,8 @@ struct file
     friend std::ostream& operator<<(std::ostream &os, const file &f);
 
     void parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_ptr<file> &shared_this );
+
+    void append_to_archive( std::fstream& archive_file );
 
     void write_to_archive( std::fstream &archive_file );
 

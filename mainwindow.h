@@ -8,6 +8,7 @@
 #include <QFileDialog>
 #include <memory>
 #include <typeinfo>
+#include <QInputDialog>
 #include "archive.h"
 
 QT_BEGIN_NAMESPACE
@@ -26,8 +27,12 @@ public:
     void newArchiveModel();
     void createEmptyArchive();
     void load_archive( std::string path_to_archive );
+    void reload_archive();
+    void write_file_to_current_archive( file* file_model );
+    void write_folder_to_current_archive( folder* folder_model );
 
     archive* archive_ptr;
+    std::string current_archive_path;
     //Ui::MainWindow *ui;
 
 
@@ -49,6 +54,8 @@ private slots:
     void on_pathToolButton_clicked();
 
     void on_buttonAddNewFile_clicked();
+
+    void on_buttonAddNewFolder_clicked();
 
 private:
     Ui::MainWindow *ui;

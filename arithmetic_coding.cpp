@@ -1,8 +1,6 @@
 #include "arithmetic_coding.h"
 
 
-
-
 arithmetic_coding::arithmetic_coding()
 {
 

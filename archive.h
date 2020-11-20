@@ -41,7 +41,8 @@ public:
     void load( const std::string& path_to_file );
 
     // Creates empty archive, needs to happen before adding files
-    void build_empty_archive() const;
+    void build_empty_archive() const;                       // default archive name
+    void build_empty_archive( std::string archive_name );   // custom archive name
 
     // Finds and returns pointer to unique_ptr to file
     std::unique_ptr<file>* find_file_in_archive( folder* parent, file* wanted_file );
@@ -54,11 +55,11 @@ public:
 
     // Adds information about file to archive's model, needs to happen for compression to be possible
     static void add_file_to_archive_model(std::unique_ptr<folder> &parent_dir, const std::string& path_to_file, uint16_t &flags );
+    file* add_file_to_archive_model(folder& parent_dir, const std::string& path_to_file, uint16_t& flags );
 
     // Adds folder to archive's model, and returns pointer to unique pointer to it for future use
     static std::unique_ptr<folder>* add_folder_to_model( std::unique_ptr<folder> &parent_dir, const std::string& folder_name );
-
-    void add_file_to_archive_model(folder& parent_dir, const std::string& path_to_file, uint16_t& flags );
+    folder* add_folder_to_model( folder* parent_dir, std::string folder_name );
 
     // Prints whole archive's useful data onto console
     void recursive_print() const;

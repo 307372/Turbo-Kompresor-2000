@@ -82,9 +82,9 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="pushButton">
+       <widget class="QPushButton" name="buttonAddNewFolder">
         <property name="text">
-         <string>Save archive</string>
+         <string>Add new folder</string>
         </property>
        </widget>
       </item>

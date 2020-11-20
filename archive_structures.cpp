@@ -1,17 +1,11 @@
 #include "archive_structures.h"
 
-#include <utility>
+
 
 void file::interpret_flags(std::fstream &os, const std::string& path_to_destination, bool decode ) {
 
     std::bitset<16> bin_flags = this->flags_value;
-    /*std::cout << "Flags look as follows:\n";
 
-    for (int16_t i=15; i>=0; i--) { // big-endian
-        std::cout << bin_flags[i];
-        if ( (i)%4 == 0 ) std::cout << ' ';
-    }
-    std::cout << " big endian" << std::endl;*/
     assert( bin_flags.any() );
 
     if ( bin_flags[0] ) {
@@ -128,6 +122,8 @@ std::ostream& operator<<(std::ostream &os, const file &f)
 void file::parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_ptr<file> &shared_this ) {
     uint8_t buffer[8];
     os.seekg( pos );
+
+    this->alreadySaved = true;
     this->location = pos;
     this->name_length = (uint8_t)os.get();
 
@@ -177,120 +173,124 @@ void file::parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_pt
 
 void file::write_to_archive( std::fstream &archive_file ) {
 
-    location = archive_file.tellp();
+    if (!this->alreadySaved) {
+        this->alreadySaved = true;
+        location = archive_file.tellp();
 
-    if (parent_ptr != nullptr) { // correcting current file's location in model, and in file
-        if ( parent_ptr->child_file_ptr.get() == this ) {
-           // std::cout << " parent_ptr->child_file_ptr.get() == this" << std::endl;
-            uint64_t backup_p = archive_file.tellp();
+        if (parent_ptr != nullptr) { // correcting current file's location in model, and in file
+            if ( parent_ptr->child_file_ptr.get() == this ) {
+               // std::cout << " parent_ptr->child_file_ptr.get() == this" << std::endl;
+                uint64_t backup_p = archive_file.tellp();
 
-            archive_file.seekp( parent_ptr->location + 1 + parent_ptr->name_length + 24 ); // seekp( start of child_file_location in archive file )
-            auto buffer = new uint8_t[8];
+                archive_file.seekp( parent_ptr->location + 1 + parent_ptr->name_length + 24 ); // seekp( start of child_file_location in archive file )
+                auto buffer = new uint8_t[8];
 
-            for (uint8_t i=0; i < 8; i++)
-                buffer[i] = ( location >> (i*8u)) & 0xFFu; // Potentially fixed?
+                for (uint8_t i=0; i < 8; i++)
+                    buffer[i] = ( location >> (i*8u)) & 0xFFu; // Potentially fixed?
 
-            archive_file.write((char*)buffer, 8);
-            delete[] buffer;
+                archive_file.write((char*)buffer, 8);
+                delete[] buffer;
 
-            archive_file.seekp( backup_p );
+                archive_file.seekp( backup_p );
 
-        }
-        else {
-            file* file_ptr = parent_ptr->child_file_ptr.get(); // location of previous file in the same dir
-            while( file_ptr->sibling_ptr != nullptr )
-            {
-                if (this != file_ptr->sibling_ptr.get())
-                    file_ptr = file_ptr->sibling_ptr.get();
-                else
-                    break;
             }
-            // std::cout << name << "\t" << location << std::endl;
+            else {
+                file* file_ptr = parent_ptr->child_file_ptr.get(); // location of previous file in the same dir
+                while( file_ptr->sibling_ptr != nullptr )
+                {
+                    if (this != file_ptr->sibling_ptr.get())
+                        file_ptr = file_ptr->sibling_ptr.get();
+                    else
+                        break;
+                }
+                // std::cout << name << "\t" << location << std::endl;
 
-            uint64_t backup_p = archive_file.tellp();
-            archive_file.seekp( file_ptr->location + 1 + file_ptr->name_length + 8 ); // seekp( start of sibling_location in archive file )
-            auto buffer = new uint8_t[8];
+                uint64_t backup_p = archive_file.tellp();
+                archive_file.seekp( file_ptr->location + 1 + file_ptr->name_length + 8 ); // seekp( start of sibling_location in archive file )
+                auto buffer = new uint8_t[8];
 
-            for (uint8_t i=0; i < 8; i++)
-                buffer[i] = ( location >> (i*8u)) & 0xFFu; // Potentially fixed?
+                for (uint8_t i=0; i < 8; i++)
+                    buffer[i] = ( location >> (i*8u)) & 0xFFu; // Potentially fixed?
 
-            archive_file.write((char*)buffer, 8);
-            delete[] buffer;
-            archive_file.seekp( backup_p );
+                archive_file.write((char*)buffer, 8);
+                delete[] buffer;
+                archive_file.seekp( backup_p );
+            }
         }
-    }
 
 
-    uint32_t buffer_size = base_metadata_size+name_length;
-    auto buffer = new uint8_t[buffer_size];
-    uint32_t bi=0; //buffer index
+        uint32_t buffer_size = base_metadata_size+name_length;
+        auto buffer = new uint8_t[buffer_size];
+        uint32_t bi=0; //buffer index
 
-    buffer[bi] = name_length;   //writing name length to file
-    bi++;
+        buffer[bi] = name_length;   //writing name length to file
+        bi++;
 
-    for (uint16_t i=0; i < name_length; i++)    //writing name to file
-        buffer[bi+i] = name[i];
-    bi += name_length;
+        for (uint16_t i=0; i < name_length; i++)    //writing name to file
+            buffer[bi+i] = name[i];
+        bi += name_length;
 
-    if (parent_ptr)
-        for (uint8_t i = 0; i < 8; i++)
-            buffer[bi + i] = (parent_ptr->location >> (i * 8u)) & 0xFFu;
-    else
-        for (uint8_t i = 0; i < 8; i++)
-            buffer[bi + i] = 0;
-    bi += 8;
+        if (parent_ptr)
+            for (uint8_t i = 0; i < 8; i++)
+                buffer[bi + i] = (parent_ptr->location >> (i * 8u)) & 0xFFu;
+        else
+            for (uint8_t i = 0; i < 8; i++)
+                buffer[bi + i] = 0;
+        bi += 8;
 
-    if (sibling_ptr)
+        if (sibling_ptr)
+            for (uint8_t i=0; i < 8; i++)
+                buffer[bi+i] = (sibling_ptr->location >> (i*8u)) & 0xFFu;
+        else
+            for (uint8_t i = 0; i < 8; i++)
+                buffer[bi + i] = 0;
+        bi+=8;
+
+        for (uint8_t i=0; i < 2; i++)
+            buffer[bi+i] = ((unsigned)flags_value >> (i*8u)) & 0xFFu;
+        bi+=2;
+
         for (uint8_t i=0; i < 8; i++)
-            buffer[bi+i] = (sibling_ptr->location >> (i*8u)) & 0xFFu;
-    else
-        for (uint8_t i = 0; i < 8; i++)
-            buffer[bi + i] = 0;
-    bi+=8;
+            buffer[bi+i] = (data_location >> (i*8u)) & 0xFFu;
+        bi+=8;
 
-    for (uint8_t i=0; i < 2; i++)
-        buffer[bi+i] = ((unsigned)flags_value >> (i*8u)) & 0xFFu;
-    bi+=2;
+        for (uint8_t i=0; i < 8; i++)
+            buffer[bi+i] = (compressed_size >> (i * 8u)) & 0xFFu;
+        bi+=8;
 
-    for (uint8_t i=0; i < 8; i++)
-        buffer[bi+i] = (data_location >> (i*8u)) & 0xFFu;
-    bi+=8;
+        for (uint8_t i=0; i < 8; i++)
+            buffer[bi+i] = (uncompressed_size >> (i * 8u)) & 0xFFu;
 
-    for (uint8_t i=0; i < 8; i++)
-        buffer[bi+i] = (compressed_size >> (i * 8u)) & 0xFFu;
-    bi+=8;
+        assert( bi+8 == buffer_size );
+        archive_file.write((char*)buffer, buffer_size);
+        delete[] buffer;
 
-    for (uint8_t i=0; i < 8; i++)
-        buffer[bi+i] = (uncompressed_size >> (i * 8u)) & 0xFFu;
 
-    assert( bi+8 == buffer_size );
-    archive_file.write((char*)buffer, buffer_size);
-    delete[] buffer;
+        auto backup_end_of_metadata = archive_file.tellp(); // position in file right after the end of metadata
 
-    auto backup_end_of_metadata = archive_file.tellp(); // position in file right after the end of metadata
+        data_location = backup_end_of_metadata;
 
-    data_location = backup_end_of_metadata;
+        interpret_flags( archive_file, "encoding has it's path in the file object", false );
 
-    interpret_flags( archive_file, "encoding has it's path in the file object", false );
+        std::cout << "compressed size: " << compressed_size << std::endl;
 
-    std::cout << "compressed size: " << compressed_size << std::endl;
+        auto backup_p = archive_file.tellp();
 
-    auto backup_p = archive_file.tellp();
+        archive_file.seekp( backup_end_of_metadata );
+        archive_file.seekp( -24, std::ios::cur );
 
-    archive_file.seekp( backup_end_of_metadata );
-    archive_file.seekp( -24, std::ios::cur );
+        auto buffer2 = new uint8_t[16];
 
-    auto buffer2 = new uint8_t[16];
+        for (uint8_t i=0; i < 8; i++)
+            buffer2[i] = (data_location >> (i*8u)) & 0xFFu; // Potentially fixed?
+        for (uint8_t i=0; i < 8; i++)
+            buffer2[i+8] = (compressed_size >> (i*8u)) & 0xFFu;
 
-    for (uint8_t i=0; i < 8; i++)
-        buffer2[i] = (data_location >> (i*8u)) & 0xFFu; // Potentially fixed?
-    for (uint8_t i=0; i < 8; i++)
-        buffer2[i+8] = (compressed_size >> (i*8u)) & 0xFFu;
+        archive_file.write((char*)buffer2, 16);
+        delete[] buffer2;
 
-    archive_file.write((char*)buffer2, 16);
-    delete[] buffer2;
-
-    archive_file.seekp( backup_p );
+        archive_file.seekp( backup_p );
+    }
 
     if (sibling_ptr) sibling_ptr->write_to_archive( archive_file );
 
@@ -332,6 +332,12 @@ folder::folder( std::unique_ptr<folder> &parent, std::string folder_name ) {
     parent_ptr = parent.get();
 }
 
+folder::folder( folder* parent, std::string folder_name ) {
+    name = std::move(folder_name);
+    name_length = name.length();
+    parent_ptr = parent;
+}
+
 void folder::recursive_print(std::ostream &os) const {
     os << *this << '\n';
     if (child_file_ptr) child_file_ptr->recursive_print( os );
@@ -359,6 +365,7 @@ void folder::parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_
 {
     uint8_t buffer[8];
     os.seekg( pos );
+    this->alreadySaved = true;
     this->location = pos;
     this->name_length = (uint8_t)os.get();
 
@@ -407,114 +414,128 @@ void folder::parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_
     }
 }
 
+void folder::append_to_archive( std::fstream& archive_file ) {
+    // archive_file.flush();
+    archive_file.seekp(0, std::ios_base::end);
+    this->write_to_archive( archive_file );
+}
+
+void file::append_to_archive( std::fstream& archive_file ) {
+    archive_file.seekp(0, std::ios_base::end);
+    this->write_to_archive( archive_file );
+}
+
 void folder::write_to_archive( std::fstream &archive_file ) {
 
-    location = archive_file.tellp();
+    if (!this->alreadySaved) {
+        this->alreadySaved = true;
+        location = archive_file.tellp();
 
-    if (parent_ptr != nullptr) { // correcting current dir's location in model, and in file
-        if ( parent_ptr->child_dir_ptr.get() == this ) {
-            // update parent's knowledge of it's firstborn's location in file
-            std::cout << " parent_ptr->child_dir_ptr.get() == this" << std::endl;
+        if (parent_ptr != nullptr) { // correcting current dir's location in model, and in file
+            if ( parent_ptr->child_dir_ptr.get() == this ) {
+                // update parent's knowledge of it's firstborn's location in file
+                std::cout << " parent_ptr->child_dir_ptr.get() == this" << std::endl;
 
-            uint64_t backup_p = archive_file.tellp();
+                uint64_t backup_p = archive_file.tellp();
 
-            archive_file.seekp( parent_ptr->location + 1 + parent_ptr->name_length + 8 ); // seekp( start of child_dir_location in archive file )
-            auto buffer = new uint8_t[8];
+                archive_file.seekp( parent_ptr->location + 1 + parent_ptr->name_length + 8 ); // seekp( start of child_dir_location in archive file )
+                auto buffer = new uint8_t[8];
 
-            for (uint8_t i=0; i < 8; i++)
-                buffer[i] = ( location >> (i*8u)) & 0xFFu; // Potentially fixed?
+                for (uint8_t i=0; i < 8; i++)
+                    buffer[i] = ( location >> (i*8u)) & 0xFFu; // Potentially fixed?
 
-            archive_file.write((char*)buffer, 8);
-            delete[] buffer;
+                archive_file.write((char*)buffer, 8);
+                delete[] buffer;
 
-            archive_file.seekp( backup_p );
-        }
-        else {
-            folder* previous_folder = parent_ptr->child_dir_ptr.get();
-            while( previous_folder->sibling_ptr != nullptr )
-            {
-                if (this != previous_folder->sibling_ptr.get())
-                    previous_folder = previous_folder->sibling_ptr.get();
-                else
-                    break;
+                archive_file.seekp( backup_p );
             }
+            else {
+                folder* previous_folder = parent_ptr->child_dir_ptr.get();
+                while( previous_folder->sibling_ptr != nullptr )
+                {
+                    if (this != previous_folder->sibling_ptr.get())
+                        previous_folder = previous_folder->sibling_ptr.get();
+                    else
+                        break;
+                }
 
-            std::cout << name << "\t" << location << std::endl;
+                std::cout << name << "\t" << location << std::endl;
 
-            uint64_t backup_p = archive_file.tellp();
-            archive_file.seekp( previous_folder->location + 1 + previous_folder->name_length + 16 ); // seekp( start of sibling_location in archive file )
-            auto buffer = new uint8_t[8];
+                uint64_t backup_p = archive_file.tellp();
+                archive_file.seekp( previous_folder->location + 1 + previous_folder->name_length + 16 ); // seekp( start of sibling_location in archive file )
+                auto buffer = new uint8_t[8];
 
-            for (uint8_t i=0; i < 8; i++)
-                buffer[i] = ( location >> (i*8u)) & 0xFFu; // Potentially fixed?
+                for (uint8_t i=0; i < 8; i++)
+                    buffer[i] = ( location >> (i*8u)) & 0xFFu; // Potentially fixed?
 
-            archive_file.write((char*)buffer, 8);
-            delete[] buffer;
+                archive_file.write((char*)buffer, 8);
+                delete[] buffer;
 
-            archive_file.seekp( backup_p );
+                archive_file.seekp( backup_p );
+            }
         }
-    }
 
-    uint32_t buffer_size = base_metadata_size+name_length;
-    auto buffer = new uint8_t[buffer_size];
-    uint32_t bi=0; //buffer index
+        uint32_t buffer_size = base_metadata_size+name_length;
+        auto buffer = new uint8_t[buffer_size];
+        uint32_t bi=0; //buffer index
 
-    buffer[bi] = name_length;   //writing name length to file
-    bi++;
+        buffer[bi] = name_length;   //writing name length to file
+        bi++;
 
-    for (uint16_t i=0; i < name_length; i++)    //writing name to file
-        buffer[bi+i] = name[i];
-    bi += name_length;
+        for (uint16_t i=0; i < name_length; i++)    //writing name to file
+            buffer[bi+i] = name[i];
+        bi += name_length;
 
-    if (parent_ptr)
-        for (uint8_t i = 0; i < 8; i++)
-            buffer[bi + i] = (parent_ptr->location >> (i * 8u)) & 0xFFu;
-    else
-        for (uint8_t i = 0; i < 8; i++)
-            buffer[bi + i] = 0;
-    bi += 8;
-
-    if (child_dir_ptr)
-        for (uint8_t i=0; i < 8; i++)
-            buffer[bi+i] = (child_dir_ptr->location >> (i*8u)) & 0xFFu;
-    else
-        for (uint8_t i = 0; i < 8; i++)
-            buffer[bi + i] = 0;
-    bi+=8;
-
-    if (sibling_ptr) {
-        for (uint8_t i = 0; i < 8; i++)
-            buffer[bi + i] = (sibling_ptr->location >> (i * 8u)) & 0xFFu;
+        if (parent_ptr)
+            for (uint8_t i = 0; i < 8; i++)
+                buffer[bi + i] = (parent_ptr->location >> (i * 8u)) & 0xFFu;
+        else
+            for (uint8_t i = 0; i < 8; i++)
+                buffer[bi + i] = 0;
         bi += 8;
-    } else {
-        for (uint8_t i = 0; i < 8; i++)
-            buffer[bi + i] = 0;
-        bi += 8;
+
+        if (child_dir_ptr)
+            for (uint8_t i=0; i < 8; i++)
+                buffer[bi+i] = (child_dir_ptr->location >> (i*8u)) & 0xFFu;
+        else
+            for (uint8_t i = 0; i < 8; i++)
+                buffer[bi + i] = 0;
+        bi+=8;
+
+        if (sibling_ptr) {
+            for (uint8_t i = 0; i < 8; i++)
+                buffer[bi + i] = (sibling_ptr->location >> (i * 8u)) & 0xFFu;
+            bi += 8;
+        } else {
+            for (uint8_t i = 0; i < 8; i++)
+                buffer[bi + i] = 0;
+            bi += 8;
+        }
+
+        if (child_file_ptr)
+            for (uint8_t i=0; i < 8; i++)
+                buffer[bi+i] = (child_file_ptr->location >> (i*8u)) & 0xFFu;
+        else
+            for (uint8_t i=0; i < 8; i++)
+                buffer[bi+i] = 0;
+
+
+        assert( bi+8 == buffer_size );
+
+        archive_file.write((char*)buffer, buffer_size);
+        // std::cout << "Folder " << name << " tellp() = " << archive_file.tellp() << std::endl;
+        // std::cout << "child_folder_location " << child_file_location << std::endl;
+        delete[] buffer;
     }
-
-    if (child_file_ptr)
-        for (uint8_t i=0; i < 8; i++)
-            buffer[bi+i] = (child_file_ptr->location >> (i*8u)) & 0xFFu;
-    else
-        for (uint8_t i=0; i < 8; i++)
-            buffer[bi+i] = 0;
-
-
-    assert( bi+8 == buffer_size );
-
-    archive_file.write((char*)buffer, buffer_size);
-    // std::cout << "Folder " << name << " tellp() = " << archive_file.tellp() << std::endl;
-    // std::cout << "child_folder_location " << child_file_location << std::endl;
-    delete[] buffer;
 
     if (sibling_ptr)
         sibling_ptr->write_to_archive( archive_file );
 
     if (child_file_ptr)
-        child_file_ptr->write_to_archive(archive_file );
+        child_file_ptr->write_to_archive( archive_file );
 
     if (child_dir_ptr)
-        child_dir_ptr->write_to_archive(archive_file );
+        child_dir_ptr->write_to_archive( archive_file );
 
 }
 
