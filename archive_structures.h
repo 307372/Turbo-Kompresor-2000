@@ -10,7 +10,8 @@
 #include <bitset>
 #include <utility>
 
-#include "arithmetic_coding.h"
+//#include "arithmetic_coding.h"
+#include "compression.h"
 #include "notcompression.h"
 #include "project_exceptions.h"
 #include "integrity_validation.h"

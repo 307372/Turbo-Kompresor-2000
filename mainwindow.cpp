@@ -107,7 +107,7 @@ void TreeWidgetFile::unpack( std::string path_for_extraction ) {
 }
 
 TreeWidgetFile::TreeWidgetFile(TreeWidgetFolder *parent, file* ptr_to_file, archive* ptr_to_archive)
-    : QTreeWidgetItem(parent, QStringList() << ptr_to_file->name.c_str() << QString::number(ptr_to_file->uncompressed_size) << QString::number(ptr_to_file->compressed_size/8) << QString::number((float)ptr_to_file->uncompressed_size/(float)(ptr_to_file->compressed_size/8)), QTreeWidgetItem::UserType+2 )
+    : QTreeWidgetItem(parent, QStringList() << ptr_to_file->name.c_str() << QString::number(ptr_to_file->uncompressed_size) << QString::number(ptr_to_file->compressed_size) << QString::number((float)ptr_to_file->uncompressed_size/(float)(ptr_to_file->compressed_size)), QTreeWidgetItem::UserType+2 )
 {
     this->file_ptr = ptr_to_file;
     this->archive_ptr = ptr_to_archive;

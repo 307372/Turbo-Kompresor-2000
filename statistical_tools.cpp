@@ -8,7 +8,7 @@
 #include <iterator>
 #include <chrono>
 
-statistical_tools::statistical_tools( std::string absolute_path_to_file )
+statistical_tools::statistical_tools( std::string& absolute_path_to_file )
 {
     for (auto &i : this->r) i = 0;
     this->alphabet = "";
@@ -17,6 +17,15 @@ statistical_tools::statistical_tools( std::string absolute_path_to_file )
     this->max = UINT_MAX;
     this->entropy = 0;
 }
+
+statistical_tools::statistical_tools() {    // fileless version
+    for (auto &i : this->r) i = 0;
+    this->alphabet = "";
+    this->file_size = 0;
+    this->max = UINT_MAX;
+    this->entropy = 0;
+}
+
 
 statistical_tools::~statistical_tools()
 {
@@ -78,7 +87,31 @@ void statistical_tools::get_entropy()
 }
 
 
+void statistical_tools::iid_model_from_text( uint8_t text[], uint32_t text_size ) {
 
+    for (uint32_t i=0; i < text_size; ++i) {
+        this->r[text[i]]++;
+    }
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    for (uint32_t i = 0; i <= UCHAR_MAX; i++) {
+        r[i] *= this->max;
+        r[i] /= text_size;
+    }
+
+    uint64_t rsum2 = std::accumulate(r, r + 256, 0ull);
+    if (rsum2 > this->max) {
+        *std::max_element(std::begin(r), std::end(r)) -= rsum2 - this->max;
+        rsum2 = this->max;
+    } else if (rsum2 < this->max) {
+        *std::max_element(std::begin(r), std::end(r)) += this->max - rsum2;
+        rsum2 = this->max;
+    }
+
+    assert(rsum2 == this->max);
+
+}
 
 
 

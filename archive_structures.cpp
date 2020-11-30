@@ -5,6 +5,7 @@
 void file::interpret_flags(std::fstream &os, const std::string& path_to_destination, bool decode ) {
 
     std::bitset<16> bin_flags = this->flags_value;
+    Compression comp;
 
     assert( bin_flags.any() );
 
@@ -18,12 +19,39 @@ void file::interpret_flags(std::fstream &os, const std::string& path_to_destinat
     }
     if ( bin_flags[2] ) {
         std::cout << "Bit 2/4\t\t\tis true - arithmetic coding with IID model for the whole file is used." << std::endl;
-        arithmetic_coding ac;
+        Compression comp;
         if (!decode) { //
-            this->compressed_size = ac.encode_file_to_fstream( os, this->path, 8*1024 );
+            //this->compressed_size = ac.encode_file_to_fstream( os, this->path, 8*1024 );
 
-        } else { //encoding
-            ac.decode_to_file_from_fstream(os, path_to_destination + '/' + this->name, this->compressed_size, this->uncompressed_size);
+            if(comp.size == 0) {
+                std::fstream input(this->path, std::ios::binary | std::ios::in);
+                comp.load_text( input, this->uncompressed_size );
+                input.close();
+            }
+            comp.BWT_make();
+            comp.MTF_make();
+            comp.RLE_make();
+            comp.AC_make();
+            comp.save_text(os);
+            this->compressed_size = comp.size;
+
+        } else { //decoding
+            //ac.decode_to_file_from_fstream(os, path_to_destination + '/' + this->name, this->compressed_size, this->uncompressed_size);
+            if(comp.size == 0) {
+                //uint64_t backup_g = os.tellg();
+                os.seekg(this->data_location);
+                comp.load_text( os, this->compressed_size );
+                //os.seekg(backup_g);
+            }
+            comp.AC_reverse();
+            comp.RLE_reverse();
+            comp.MTF_reverse();
+            comp.BWT_reverse();
+            std::cout << "Decoding path: " << path_to_destination << std::endl;
+            std::fstream output(path_to_destination + "/" + this->name, std::ios::binary | std::ios::out);
+            assert( output.is_open() );
+            comp.save_text(output);
+            output.close();
         }
     }
     if ( bin_flags[3] ) {

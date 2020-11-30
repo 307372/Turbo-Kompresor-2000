@@ -13,15 +13,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Widgets REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets REQUIRED)
-
+find_library( divsufsort_lib divsufsort )
 
 add_executable(Turbo-Kompresor-2000
   main.cpp
   mainwindow.cpp
   mainwindow.h
   mainwindow.ui
-  arithmetic_coding.cpp
-  arithmetic_coding.h
   main.cpp
   statistical_tools.cpp
   statistical_tools.h
@@ -35,7 +33,10 @@ add_executable(Turbo-Kompresor-2000
   archive_structures.cpp
   project_exceptions.h
   project_exceptions.cpp
+  compression.h
+  compression.cpp
   resources.qrc
 )
 
-target_link_libraries(Turbo-Kompresor-2000 PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+target_link_libraries(Turbo-Kompresor-2000 PRIVATE Qt${QT_VERSION_MAJOR}::Widgets "${divsufsort_lib}" )
+
