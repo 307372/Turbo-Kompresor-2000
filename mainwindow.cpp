@@ -1,6 +1,8 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
+
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -10,21 +12,21 @@ MainWindow::MainWindow(QWidget *parent)
 
     archive_ptr = new archive();
 
-    ui->archiveWidget->setHeaderLabels(QStringList() << "File" << "Uncompressed Size" << "Compressed Size" << "Compression Ratio");
     ui->archiveWidget->setColumnWidth(0, 500);
-
-
+    ui->archiveWidget->setSelectionMode( QAbstractItemView::SelectionMode::ExtendedSelection );
+    config_ptr = new Config();
 }
 
 MainWindow::~MainWindow()
 {
-    delete archive_ptr;
-    delete ui;
+    if (archive_ptr != nullptr) delete archive_ptr;
+    if (ui          != nullptr) delete ui;
+    if (config_ptr  != nullptr) delete config_ptr;
 }
 
 void MainWindow::newArchiveModel() {
     ui->archiveWidget->clear();
-    delete archive_ptr;
+    if (archive_ptr != nullptr) delete archive_ptr;
     archive_ptr = new archive();
 }
 
@@ -37,25 +39,28 @@ void MainWindow::load_archive( std::string path_to_archive ) {
 
     ui->archiveWidget->addTopLevelItem( new TreeWidgetFolder( ui->archiveWidget->invisibleRootItem(), archive_ptr->archive_dir.get(), archive_ptr ) );
     this->ui->archiveWidget->expandAll();
+
+    this->ui->archiveWidget->sortByColumn(0, Qt::SortOrder::AscendingOrder);
 }
 
 void MainWindow::reload_archive() {
     this->newArchiveModel();
     this->load_archive( current_archive_path );
 }
-void MainWindow::write_file_to_current_archive( file* file_model ) {
 
-    file_model->append_to_archive( this->archive_ptr->archive_file );
-    this->reload_archive();
+void MainWindow::write_file_to_current_archive( file* file_ptr, bool& aborting_var ) {
+
+    file_ptr->append_to_archive( this->archive_ptr->archive_file, aborting_var );
+
 }
 
-void MainWindow::write_folder_to_current_archive( folder* folder_model ) {
-    folder_model->append_to_archive( this->archive_ptr->archive_file );
+void MainWindow::write_folder_to_current_archive( folder* folder_model, bool& aborting_var ) {
+    folder_model->append_to_archive( this->archive_ptr->archive_file, aborting_var );
     this->reload_archive();
 }
 
 TreeWidgetFolder::TreeWidgetFolder(QTreeWidgetItem *parent, folder* ptr_to_folder, archive* ptr_to_archive  )
-    : QTreeWidgetItem(parent, QStringList() << ptr_to_folder->name.c_str(), QTreeWidgetItem::UserType+1)
+: QTreeWidgetItem(parent, QStringList() << ptr_to_folder->name.c_str(), QTreeWidgetItem::UserType+1)
 {
     this->folder_ptr = ptr_to_folder;
     this->archive_ptr = ptr_to_archive;
@@ -84,31 +89,34 @@ TreeWidgetFolder::TreeWidgetFolder(TreeWidgetFolder *parent, folder* ptr_to_fold
 }
 
 
-void TreeWidgetFolder::unpack( std::string path_for_extraction ) {
+void TreeWidgetFolder::unpack( std::string path_for_extraction, bool& aborting_var ) {
     std::filesystem::path extraction_path( path_for_extraction );
     if ( !extraction_path.empty() ) {   // check if something is at least written
         std::fstream source( archive_ptr->load_path, std::ios::binary | std::ios::in);
         assert( source.is_open() );
 
-        folder_ptr->unpack( path_for_extraction, source, true);
+        folder_ptr->unpack( path_for_extraction, source, aborting_var, true );
         source.close();
     }
 }
 
-void TreeWidgetFile::unpack( std::string path_for_extraction ) {
+void TreeWidgetFile::unpack( std::string path_for_extraction, bool& aborting_var ) {
     std::filesystem::path extraction_path( path_for_extraction );
     if ( !extraction_path.empty() ) {   // check if something is at least written
         std::fstream source( archive_ptr->load_path, std::ios::binary | std::ios::in);
         assert( source.is_open() );
 
-        file_ptr->unpack( path_for_extraction, source, false);
+        file_ptr->unpack( path_for_extraction, source, aborting_var, false );
         source.close();
     }
 }
 
 TreeWidgetFile::TreeWidgetFile(TreeWidgetFolder *parent, file* ptr_to_file, archive* ptr_to_archive)
-    : QTreeWidgetItem(parent, QStringList() << ptr_to_file->name.c_str() << QString::number(ptr_to_file->uncompressed_size) << QString::number(ptr_to_file->compressed_size) << QString::number((float)ptr_to_file->uncompressed_size/(float)(ptr_to_file->compressed_size)), QTreeWidgetItem::UserType+2 )
+: QTreeWidgetItem(parent, QStringList() << ptr_to_file->name.c_str() << QString::fromStdString(ptr_to_file->get_uncompressed_filesize_str()) << QString::fromStdString(ptr_to_file->get_compressed_filesize_str()) << QString::number((float)ptr_to_file->uncompressed_size/(float)(ptr_to_file->compressed_size)), QTreeWidgetItem::UserType+2 )
 {
+    this->setTextAlignment(1, Qt::AlignRight);
+    this->setTextAlignment(2, Qt::AlignRight);
+    this->setTextAlignment(3, Qt::AlignRight);
     this->file_ptr = ptr_to_file;
     this->archive_ptr = ptr_to_archive;
     this->setIcon(0, *(new QIcon(":/img/file.png")));
@@ -137,65 +145,73 @@ void MainWindow::on_actionOpen_archive_triggered()
 
 void MainWindow::on_buttonExtractSelected_clicked()
 {
-    if (!ui->archiveWidget->selectedItems().empty()) {
-        auto itm = ui->archiveWidget->selectedItems()[0];
-        std::cout << itm->type() << std::endl;
-        if (itm->type() == 1001) {  //TreeWidgetFolder
-            TreeWidgetFolder* twfolder = static_cast<TreeWidgetFolder*>(itm);
-            twfolder->unpack( ui->pathLineEdit->text().toStdString() );
-        } else if (itm->type() == 1002) {   //TreeWidgetFile
-            TreeWidgetFile* twfile = static_cast<TreeWidgetFile*>(itm);
-            twfile->unpack( ui->pathLineEdit->text().toStdString() );
-        }
+
+    auto selected = ui->archiveWidget->selectedItems();
+
+    if (!selected.empty()) {
+
+        std::vector<QTreeWidgetItem*> extraction_targets;
+        for (int32_t i=0; i < selected.size(); ++i) extraction_targets.push_back( selected[i] );
+
+        MyDialog md( extraction_targets,  this);
+        md.prepare_GUI_decompression();
+        md.exec();
+
+        this->reload_archive();
     }
 }
 
 void MainWindow::on_buttonExtractAll_clicked()
 {
+
+    bool aborting_var = false;  // temporary
+    std::cout << "temporary aborting variable is used!" << std::endl;
+
+
     std::fstream source( this->archive_ptr->load_path );
     assert( source.is_open() );
-    this->archive_ptr->unpack_whole_archive(ui->pathLineEdit->text().toStdString(), source );
+    // this->archive_ptr->unpack_whole_archive(ui->pathLineEdit->text().toStdString(), source, aborting_var );
 
     source.close();
 }
 
-void MainWindow::on_pathToolButton_clicked()
-{
 
-    QString filter = "Archive (*.tk2k) ;; All Files (*.*)" ;
-    QFileDialog dialog(this);
-    dialog.setFileMode(QFileDialog::DirectoryOnly);
-    QString path_to_folder = dialog.getExistingDirectory(this, "Choose where you want extracted files to go");
-    ui->pathLineEdit->setText(path_to_folder);
-}
 
 
 
 void MainWindow::on_buttonAddNewFile_clicked()
 {
+
     if (!ui->archiveWidget->selectedItems().empty()) {
         auto itm = ui->archiveWidget->selectedItems()[0];
         std::cout << itm->type() << std::endl;
-        if (itm->type() == 1001) {  //TreeWidgetFolder
+        if (itm->type() == 1001) {  // TreeWidgetFolder
             TreeWidgetFolder* twfolder = static_cast<TreeWidgetFolder*>(itm);
-            QString file_path = QFileDialog::getOpenFileName(this, "Open an archive", QDir::homePath() + "/Desktop" );
-            if (!file_path.isEmpty()) {
-                uint16_t flags = (1u<<15u)+(1u<<2u);    // temporary flags
-                // std::unique_ptr<folder>* unique_this = archive_ptr->find_folder_in_archive(twfolder->folder_ptr->parent_ptr, twfolder->folder_ptr);
-                file* new_file_ptr = twfolder->archive_ptr->add_file_to_archive_model( *(twfolder->folder_ptr), file_path.toStdString(), flags );
-                this->write_file_to_current_archive( new_file_ptr );
+            QFileDialog dialog( this, "Select files which you want to add", QDir::homePath() + "/Desktop" );
+            dialog.setFileMode(QFileDialog::ExistingFiles);
+            QStringList file_path_list = dialog.getOpenFileNames(this, "Select files which you want to add" );
+            if (!file_path_list.isEmpty()) {
+
+                MyDialog md(twfolder, file_path_list, this);
+                md.prepare_GUI_compression();
+                md.exec();
+
+                this->reload_archive();
             }
-            //twfolder->
-        } else if (itm->type() == 1002) {   //TreeWidgetFile
+        }
+        else if (itm->type() == 1002) {   // TreeWidgetFile
             TreeWidgetFile* twfile = static_cast<TreeWidgetFile*>(itm);
-            QString file_path = QFileDialog::getOpenFileName(this, "Open an archive", QDir::homePath() + "/Desktop" );
-            if (!file_path.isEmpty()) {
-                uint16_t flags = (1u<<15u)+(1u<<2u);
-                // std::unique_ptr<folder>* unique_this = archive_ptr->find_file_in_archive(twfile->file_ptr->parent_ptr, twfile->file_ptr);
-                file* new_file_ptr = twfile->archive_ptr->add_file_to_archive_model( *(twfile->file_ptr->parent_ptr), file_path.toStdString(), flags );
-                this->write_file_to_current_archive( new_file_ptr );
+            QFileDialog dialog( this, "Select files which you want to add", QDir::homePath() + "/Desktop" );
+            dialog.setFileMode(QFileDialog::ExistingFiles);
+            QStringList file_path_list = dialog.getOpenFileNames(this, "Select files which you want to add" );
+            if (!file_path_list.isEmpty()) {
+
+                MyDialog md(twfile, file_path_list, this);
+                md.prepare_GUI_compression();
+                md.exec();
+
+                this->reload_archive();
             }
-            //twfile->
         }
     }
 }
@@ -218,15 +234,22 @@ void MainWindow::createEmptyArchive() {
 
         this->current_archive_path = file_path.append(file_name.string());
         archive_ptr->build_empty_archive( file_name.string() );
-        archive_ptr->save( current_archive_path );
-        this->reload_archive();
 
-        //ui->archiveWidget->addTopLevelItem( new TreeWidgetFolder( ui->archiveWidget->invisibleRootItem(), archive_ptr->archive_dir.get(), archive_ptr ) );
+        // this operation is so fast, there's no point in aborting it
+        bool aborting_var = false;
+        archive_ptr->save( current_archive_path, aborting_var );
+        this->reload_archive();
     }
 }
 
 void MainWindow::on_buttonAddNewFolder_clicked()
 {
+
+
+    bool aborting_var = false;  // temporary!
+    std::cout << "temporary aborting variable is used!" << std::endl;
+
+
     if (!ui->archiveWidget->selectedItems().empty()) {
         auto itm = ui->archiveWidget->selectedItems()[0];
         std::cout << itm->type() << std::endl;
@@ -240,12 +263,12 @@ void MainWindow::on_buttonAddNewFolder_clicked()
 
                 folder* new_folder_ptr = twfolder->archive_ptr->add_folder_to_model( twfolder->folder_ptr, folder_name.toStdString() );
 
-                this->write_folder_to_current_archive( new_folder_ptr );
+                this->write_folder_to_current_archive( new_folder_ptr, aborting_var );
             }
             else {  // ZACHODZI ROWNIEZ GDY SIE ANULUJE
                 folder_name = "new folder";
                 folder* new_folder_ptr = twfolder->archive_ptr->add_folder_to_model(twfolder->folder_ptr, folder_name.toStdString());
-                this->write_folder_to_current_archive( new_folder_ptr );
+                this->write_folder_to_current_archive( new_folder_ptr, aborting_var );
             }
             // If file is selected, add new folder as it's parent's child
         } else if (itm->type() == 1002) {   //TreeWidgetFile
@@ -254,12 +277,12 @@ void MainWindow::on_buttonAddNewFolder_clicked()
             if (!folder_name.isEmpty()) {
 
                 folder* new_folder_ptr = twfile->archive_ptr->add_folder_to_model(twfile->file_ptr->parent_ptr, folder_name.toStdString());
-                this->write_folder_to_current_archive( new_folder_ptr );
+                this->write_folder_to_current_archive( new_folder_ptr, aborting_var );
             }
             else {  // ZACHODZI ROWNIEZ GDY SIE ANULUJE
                 folder_name = "new folder";
                 folder* new_folder_ptr = twfile->archive_ptr->add_folder_to_model(twfile->file_ptr->parent_ptr, folder_name.toStdString());
-                this->write_folder_to_current_archive( new_folder_ptr );
+                this->write_folder_to_current_archive( new_folder_ptr, aborting_var );
             }
         }
     }
@@ -268,12 +291,133 @@ void MainWindow::on_buttonAddNewFolder_clicked()
 
 
 
+void MainWindow::on_buttonTest_clicked()
+{
+    auto list = this->ui->archiveWidget->selectedItems();
+
+    if (!list.empty()) {
+        for (auto &element : list){
+            std::cout << element->type() << std::endl;
+        }
+
+    }
+
+
+}
+
+
+bool TreeWidgetFile::operator<(const QTreeWidgetItem &other)const {
+    //1001 - TreeWidgetFolder
+    //1002 - TreeWidgetFile
+    int column = treeWidget()->sortColumn();
+    switch( column )
+    {
+    case 0: // sort by name
+            if ( this->text(0) < other.text(0) ) return true;    // just sort them alphabetically by name
+            else return false;
+            break;
+    case 1: // sort by size
+        if (this->type() == other.type() ) {
+            if ( this->type() == 1001 ) { // both this and other are TreeWidgetFolders
+                if ( this->text(0) < other.text(0) ) return true;    // just sort them alphabetically by name
+                else return false;
+            }
+            else {  // both this and other are TreeWidgetFiles
+                TreeWidgetFile* twfile = (TreeWidgetFile*)(&other);
+                if ( this->file_ptr->uncompressed_size < twfile->file_ptr->uncompressed_size ) return true;
+                else return false;
+            }
+        }
+        else if (this->type() < other.type()) return true;  // TreeWidgetFolders go before TreeWidgetFiles
+        else return false;
+        break;
+
+    case 2: // sort by compressed size
+        if (this->type() == other.type() ) {
+            if ( this->type() == 1001 ) { // both this and other are TreeWidgetFolders
+                if ( this->text(0) < other.text(0) ) return true;    // just sort them alphabetically by name
+                else return false;
+            }
+            else {  // both this and other are TreeWidgetFiles
+                TreeWidgetFile* twfile = (TreeWidgetFile*)(&other);
+                if ( this->file_ptr->compressed_size < twfile->file_ptr->compressed_size ) return true;
+                else return false;
+            }
+        }
+        else if (this->type() < other.type()) return true;  // TreeWidgetFolders go before TreeWidgetFiles
+        else return false;
+        break;
+
+    case 3: // sort by compression ratio
+        if (this->type() == other.type() ) {
+            if ( this->type() == 1001 ) { // both this and other are TreeWidgetFolders
+                if ( this->text(0) < other.text(0) ) return true;    // just sort them alphabetically by name
+                else return false;
+            }
+            else {  // both this and other are TreeWidgetFiles
+                TreeWidgetFile* twfile = (TreeWidgetFile*)(&other);
+                if ( this->file_ptr->uncompressed_size/this->file_ptr->compressed_size < twfile->file_ptr->uncompressed_size / twfile->file_ptr->compressed_size )
+                    return true;
+                else return false;
+            }
+        }
+        else if (this->type() < other.type()) return true;  // TreeWidgetFolders go before TreeWidgetFiles
+        else return false;
+        break;
+
+    default:
+        throw NotImplementedException("Something went terribly wrong while sorting.");
+    }
+}
 
 
 
+bool TreeWidgetFolder::operator<(const QTreeWidgetItem &other)const {
+    //1001 - TreeWidgetFolder
+    //1002 - TreeWidgetFile
+    int column = treeWidget()->sortColumn();
+    switch( column )
+    {
+    case 0: // sort by name
+            if ( this->text(0) < other.text(0) ) return true;    // just sort them alphabetically by name
+            else return false;
+            break;
+    case 1: // sort by size
+        if (this->type() == other.type() ) {// both this and other are TreeWidgetFolders
 
+            if ( this->text(0) < other.text(0) ) return true;    // just sort them alphabetically by name
+            else return false;
 
+        }
+        else if (this->type() < other.type()) return true;  // TreeWidgetFolders go before TreeWidgetFiles
+        else return false;
+        break;
 
+    case 2: // sort by compressed size
+        if (this->type() == other.type() ) {// both this and other are TreeWidgetFolders
+
+            if ( this->text(0) < other.text(0) ) return true;    // just sort them alphabetically by name
+            else return false;
+        }
+        else if (this->type() < other.type()) return true;  // TreeWidgetFolders go before TreeWidgetFiles
+        else return false;
+        break;
+
+    case 3: // sort by compression ratio
+        if (this->type() == other.type() ) {// both this and other are TreeWidgetFolders
+
+            if ( this->text(0) < other.text(0) ) return true;    // just sort them alphabetically by name
+            else return false;
+
+        }
+        else if (this->type() < other.type()) return true;  // TreeWidgetFolders go before TreeWidgetFiles
+        else return false;
+        break;
+
+    default:
+        throw NotImplementedException("Something went terribly wrong while sorting.");
+    }
+}
 
 
 

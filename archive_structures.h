@@ -9,10 +9,9 @@
 #include <iostream>
 #include <bitset>
 #include <utility>
+#include <cmath>
 
-//#include "arithmetic_coding.h"
 #include "compression.h"
-#include "notcompression.h"
 #include "project_exceptions.h"
 #include "integrity_validation.h"
 
@@ -25,10 +24,12 @@ struct folder
 
     uint8_t name_length=0;                          // length of folder name
     std::string name;                               // folder's name
+    std::filesystem::path path;                     // extraction path
 
     folder* parent_ptr = nullptr;                   // ptr to parent folder in memory
 
     bool alreadySaved = false;                      // true - file has already been saved to archive, false - it's only in the model
+    bool ptr_already_gotten = false;                // true - method get_ptrs was already used on it, so it's in the vector
 
     std::unique_ptr<folder> child_dir_ptr=nullptr;  // ptr to first subfolder in memory
 
@@ -46,11 +47,15 @@ struct folder
 
     void parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_ptr<folder> &shared_this  );
 
-    void append_to_archive( std::fstream& archive_file );
+    void append_to_archive( std::fstream& archive_file, bool& aborting_var );
 
-    void write_to_archive( std::fstream &archive_file );
+    void write_to_archive( std::fstream& archive_file, bool& aborting_var );
 
-    void unpack( const std::filesystem::path& target_path, std::fstream &os, bool unpack_all ) const;
+    void unpack( const std::filesystem::path& target_path, std::fstream &os, bool& aborting_var, bool unpack_all ) const;
+
+    void get_ptrs( std::vector<folder*>& folders, std::vector<file*>& files );
+
+    void set_path( std::filesystem::path extraction_path, bool set_all_paths );
 
 
 
@@ -68,6 +73,8 @@ struct file
     folder* parent_ptr = nullptr;                   // ptr to parent folder in memory
 
     bool alreadySaved = false;                      // true - file has already been saved to archive, false - it's only in the model
+    bool alreadyExtracted = false;                  // true - file has already been extracted
+    bool ptr_already_gotten = false;                // true - method get_ptrs was already used on it, so it's in the vector
 
     std::unique_ptr<file> sibling_ptr=nullptr;      // ptr to next sibling file in memory
 
@@ -77,7 +84,9 @@ struct file
     uint64_t compressed_size=0;                     // size of data (in bytes)
     uint64_t uncompressed_size=0;                   // size of compressed data in _B_I_T_S_
 
-    void interpret_flags(std::fstream &os, const std::string& path_to_destination, bool decode );
+    static const bool dont_abort = false;
+
+    void interpret_flags(std::fstream &os, const std::string& path_to_destination, bool decode, bool& aborting_var, bool validate_integrity = true, uint16_t* progress_ptr = nullptr );
 
     void recursive_print(std::ostream &os) const;
 
@@ -85,11 +94,19 @@ struct file
 
     void parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_ptr<file> &shared_this );
 
-    void append_to_archive( std::fstream& archive_file );
+    void append_to_archive( std::fstream& archive_file, bool& aborting_var, bool write_siblings = true );
 
-    void write_to_archive( std::fstream &archive_file );
+    void write_to_archive( std::fstream& archive_file, bool& aborting_var, bool write_siblings = true );
 
-    void unpack( const std::string& path, std::fstream &os, bool unpack_all );
+    void unpack( const std::string& path, std::fstream &os, bool& aborting_var, bool unpack_all, bool validate_integrity = true, uint16_t* progress_var = nullptr );
+
+    std::string get_compressed_filesize_str();
+
+    std::string get_uncompressed_filesize_str();
+
+    void get_ptrs( std::vector<file*>& files, bool get_siblings_too = false );
+
+    void set_path( std::filesystem::path extraction_path, bool set_all_paths );
 
 
     // void interpret_flags( uint16_t flags );

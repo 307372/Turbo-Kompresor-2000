@@ -1,0 +1,106 @@
+#include "config.h"
+
+#include <assert.h>
+#include <iostream>
+
+Config::Config()
+{
+    parse();
+}
+
+Config::~Config()
+{
+    if (config_file.is_open()) config_file.close();
+}
+
+
+
+void Config::parse()
+{
+    if (config_file.is_open()) config_file.close();
+
+    if (std::filesystem::exists(std::filesystem::current_path() / "config.ini")) {
+
+        config_file.open( std::filesystem::current_path() / "config.ini", std::ios::in );
+
+        std::string buffer;
+        uint32_t property_counter = 0;
+        while (!config_file.eof()) {
+            std::getline(config_file, buffer);
+
+            // std::cout << buffer;
+
+            if (buffer[0] == '#' and buffer[1] == '#') continue;    // my comments start with ##
+            if (buffer.length() == 0) continue;                     // if line is empty, skip it
+            switch( property_counter )
+            {
+            case 0: extraction_path = buffer; break;
+
+            default: assert(false);
+            }
+
+            property_counter++;
+        }
+        // std::cout << "Loaded extraction path:\n" << extraction_path.string() << std::endl;
+    }
+    else { // if there's no config file
+        save_default();
+        parse();
+    }
+
+
+
+    if (config_file.is_open()) config_file.close();
+}
+
+
+
+void Config::save()
+{
+    if (config_file.is_open()) config_file.close();
+
+    config_file.open( std::filesystem::current_path() / "config.ini", std::ios::out );
+    assert(config_file.is_open());
+
+    config_file << "## Configuration file for Turbo Kompresor 2000\n"
+                << "## Saved extraction path:\n"
+                << extraction_path.string() << '\n';
+
+    if (config_file.is_open()) config_file.close();
+}
+
+
+
+void Config::save_default()
+{
+    if (config_file.is_open()) config_file.close();
+
+    config_file.open( std::filesystem::current_path() / "config.ini", std::ios::out );
+    assert(config_file.is_open());
+
+    config_file << "## Configuration file for Turbo Kompresor 2000\n"
+                << "## Saved extraction path:\n"
+                << std::filesystem::current_path().string() << '\n';
+
+
+
+    if (config_file.is_open()) config_file.close();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

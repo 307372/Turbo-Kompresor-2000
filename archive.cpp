@@ -22,14 +22,14 @@ void archive::close()
 
 }
 
-void archive::save( const std::string& path_to_file )
+void archive::save( const std::string& path_to_file, bool& aborting_var )
 {
     assert(!this->archive_file.is_open());
     this->archive_file.open( path_to_file, std::ios::binary|std::ios::out );
     assert(this->archive_file.is_open());
     char* buffer[1] = {nullptr};
     this->archive_file.write( (char*)buffer, 1 ); // making sure location at byte 0 in file is not valid
-    this->archive_dir->write_to_archive(this->archive_file);
+    this->archive_dir->write_to_archive( this->archive_file, aborting_var );
 }
 
 void archive::load(const std::string& path_to_file )
@@ -84,7 +84,7 @@ std::unique_ptr<folder>* find_folder_in_archive( folder* parent, folder* wanted_
 
 
 
-void archive::unpack_whole_archive(const std::string& path_to_directory, std::fstream &os) {
+void archive::unpack_whole_archive( const std::string& path_to_directory, std::fstream &os, bool& aborting_var ) {
 
     std::filesystem::path path(path_to_directory);
     if (!std::filesystem::exists(path))
@@ -94,7 +94,7 @@ void archive::unpack_whole_archive(const std::string& path_to_directory, std::fs
 
 
     std::cout<<"Commence unpacking!"<<std::endl;
-    this->archive_dir->unpack( path, os, true );
+    this->archive_dir->unpack( path, os, aborting_var, true );
 
 }
 
@@ -198,9 +198,11 @@ file* archive::add_file_to_archive_model(folder &parent_dir, const std::string& 
 
     ptr_new_file->parent_ptr = &parent_dir;              // ptr to parent folder in memory
 
-    ptr_new_file->sibling_ptr=nullptr;             // ptr to next sibling file in memory
+    ptr_new_file->sibling_ptr = nullptr;             // ptr to next sibling file in memory
+    std::cout << "parent_dir = " << parent_dir.name << std::endl;
+    //std::cout << "===\n===\n===\nProblematic ptr: " <<  parent_dir.child_file_ptr.get() << "\n===\n===\n===" << std::endl;
 
-    if (parent_dir.child_file_ptr != nullptr)
+    if (parent_dir.child_file_ptr.get() != nullptr)
     {
         file* file_ptr = parent_dir.child_file_ptr.get(); // file_ptr points to previous file
         while( file_ptr->sibling_ptr != nullptr )

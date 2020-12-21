@@ -19,10 +19,11 @@
 
 class Compression {
 public:
+    bool* aborting_var;
     uint8_t* text;
     uint32_t size;
 
-    Compression();
+    Compression( bool& aborting_variable );
     ~Compression();
 
     void load_text( std::fstream &input, uint64_t &text_size );
@@ -37,8 +38,14 @@ public:
     void RLE_make();
     void RLE_reverse();
 
+    void RLE_makeV2();
+    void RLE_reverseV2();
+
     void AC_make();
     void AC_reverse();
+
+    void AC2_make();
+    void AC2_reverse();
 
 };
 
@@ -72,9 +79,10 @@ public:
     bool output_bit;
     uint8_t* text;
     //std::fstream* os;
-    Text_read_bitbuffer(uint8_t compressed_text[], uint64_t compressed_size);
+    Text_read_bitbuffer(uint8_t compressed_text[], uint64_t compressed_size, uint64_t starting_position = 4+4+256*4);
     bool getbit();
 };
+
 
 
 #endif //COMPRESSION_DEV_COMPRESSION_H

@@ -7,7 +7,6 @@
 #include <cassert>
 #include <filesystem>
 #include <iostream>
-#include "notcompression.h"
 #include "archive_structures.h"
 
 class archive
@@ -35,7 +34,7 @@ public:
     void close();
 
     // Saves archive
-    void save( const std::string& path_to_file );
+    void save( const std::string& path_to_file, bool& aborting_var );
 
     // Loads archive from file
     void load( const std::string& path_to_file );
@@ -51,7 +50,7 @@ public:
     std::unique_ptr<folder>* find_folder_in_archive( folder* parent, folder* wanted_folder );
 
     // Unpacks whole archive to path_to_dir
-    void unpack_whole_archive( const std::string& path_to_directory, std::fstream &os );
+    void unpack_whole_archive( const std::string& path_to_directory, std::fstream &os, bool& aborting_var );
 
     // Adds information about file to archive's model, needs to happen for compression to be possible
     static void add_file_to_archive_model(std::unique_ptr<folder> &parent_dir, const std::string& path_to_file, uint16_t &flags );

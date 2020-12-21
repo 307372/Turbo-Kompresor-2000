@@ -11,7 +11,7 @@ class integrity_validation {
 public:
     integrity_validation();
     bool is_your_machine_big_endian();
-    std::string get_SHA1( const std::string& path_to_file );
+    std::string get_SHA1( const std::string& path_to_file, bool& aborting_var );
 };
 
 

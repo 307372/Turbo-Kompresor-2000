@@ -37,6 +37,8 @@ Thumbs.db
 /backup
 /testtext
 /silesia
+/backup_fork
+/fork_2 qthread evolved
 
 # qtcreator generated files
 *.pro.user*
@@ -75,3 +77,4 @@ Thumbs.db
 *.exe
 CMakeLists.txt.user
 *.tk2k
+graph.pdf

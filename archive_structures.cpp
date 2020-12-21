@@ -1,132 +1,261 @@
 #include "archive_structures.h"
 
+uint16_t calculate_progress( float current, float whole ) { return roundf(current*100 / whole); }
 
-
-void file::interpret_flags(std::fstream &os, const std::string& path_to_destination, bool decode ) {
+void file::interpret_flags(std::fstream &os, const std::string& path_to_destination, bool encode, bool& aborting_var, bool validate_integrity, uint16_t* progress_ptr ) {
 
     std::bitset<16> bin_flags = this->flags_value;
-    Compression comp;
+    std::cout << "flags:\n" << bin_flags.to_string() << std::endl;
+    Compression comp( aborting_var );
 
     assert( bin_flags.any() );
+    uint16_t progress_counter = 0;
+    uint16_t whole = bin_flags.count();
+    std::cout << "Progress ptr = " << progress_ptr << std::endl;
 
-    if ( bin_flags[0] ) {
-        std::cout << "Bit 0/1\t\t\tis true - " << std::endl;
-        throw FlagReservedException();
-    }
-    if ( bin_flags[1] ) {
-        std::cout << "Bit 1/2\t\t\tis true - " << std::endl;
-        throw FlagReservedException();
-    }
-    if ( bin_flags[2] ) {
-        std::cout << "Bit 2/4\t\t\tis true - arithmetic coding with IID model for the whole file is used." << std::endl;
-        Compression comp;
-        if (!decode) { //
-            //this->compressed_size = ac.encode_file_to_fstream( os, this->path, 8*1024 );
+    if (progress_ptr != nullptr) (*progress_ptr) = 0;
+    // loading data for processing into Compression object, and then processing it according to flags
 
-            if(comp.size == 0) {
-                std::fstream input(this->path, std::ios::binary | std::ios::in);
-                comp.load_text( input, this->uncompressed_size );
-                input.close();
-            }
+
+    if (encode) {
+        std::fstream input(this->path, std::ios::binary | std::ios::in);
+        comp.load_text( input, this->uncompressed_size );
+
+        input.close();
+        if ( bin_flags[0] ) {
+            std::cout << "BWT encoding..." << std::endl;
             comp.BWT_make();
+            progress_counter++;
+            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+
+        }
+
+        if ( bin_flags[1] ) {
+            std::cout << "MTF encoding..." << std::endl;
             comp.MTF_make();
-            comp.RLE_make();
+            progress_counter++;
+            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+        }
+
+        if ( bin_flags[2] ) {
+            std::cout << "RLE encoding..." << std::endl;
+            comp.RLE_makeV2();
+            progress_counter++;
+            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+        }
+
+        if ( bin_flags[3] ) {
+            std::cout << "AC encoding..." << std::endl;
             comp.AC_make();
-            comp.save_text(os);
-            this->compressed_size = comp.size;
+            progress_counter++;
+            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+        }
 
-        } else { //decoding
-            //ac.decode_to_file_from_fstream(os, path_to_destination + '/' + this->name, this->compressed_size, this->uncompressed_size);
-            if(comp.size == 0) {
-                //uint64_t backup_g = os.tellg();
-                os.seekg(this->data_location);
-                comp.load_text( os, this->compressed_size );
-                //os.seekg(backup_g);
+        if ( bin_flags[4] ) {
+            std::cout << "AC2 encoding..." << std::endl;
+            comp.AC2_make();
+            progress_counter++;
+            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+        }
+
+        if ( bin_flags[5] ) {
+            std::cout << "Bit 5/32\t\tis true - " << std::endl;
+            throw FlagReservedException();
+        }
+
+        if ( bin_flags[6] ) {
+            std::cout << "Bit 6/64\t\tis true - " << std::endl;
+            throw FlagReservedException();
+        }
+
+        if ( bin_flags[7] ) {
+            std::cout << "Bit 7/128\t\tis true - " << std::endl;
+
+            throw FlagReservedException();
+        }
+
+        if ( bin_flags[8] ) {
+            std::cout << "Bit 8/256\t\tis true - " << std::endl;
+
+            throw FlagReservedException();
+        }
+
+        if ( bin_flags[9] ) {
+            std::cout << "Bit 9/512\t\tis true - " << std::endl;
+
+            throw FlagReservedException();
+        }
+
+        if ( bin_flags[10] ) {
+            std::cout << "Bit 10/1024\t\tis true - " << std::endl;
+
+            throw FlagReservedException();
+        }
+
+        if ( bin_flags[11] ) {
+            std::cout << "Bit 11/2048\t\tis true - " << std::endl;
+
+            throw FlagReservedException();
+        }
+
+        if ( bin_flags[12] ) {
+            std::cout << "Bit 12/4096\t\tis true - " << std::endl;
+
+            throw FlagReservedException();
+        }
+
+        if ( bin_flags[13] ) {
+            std::cout << "Bit 13/8192\t\tis true - " << std::endl;
+
+            throw FlagReservedException();
+        }
+
+        if ( bin_flags[14] ) {
+            std::cout << "Bit 14/16384\tis true - " << std::endl;
+
+            throw FlagReservedException();
+        }
+
+
+
+
+
+        comp.save_text(os);
+        this->compressed_size = comp.size;
+
+        if ( bin_flags[15] ) {
+            std::cout << "Appending SHA-1..." << std::endl;
+            integrity_validation iv;
+            std::basic_string<char> sha_not_encoded = iv.get_SHA1(this->path, aborting_var);
+            if (!aborting_var) {
+                assert( sha_not_encoded.length() == 40 );
+                os.write( sha_not_encoded.c_str(), sha_not_encoded.length() );
             }
-            comp.AC_reverse();
-            comp.RLE_reverse();
-            comp.MTF_reverse();
-            comp.BWT_reverse();
-            std::cout << "Decoding path: " << path_to_destination << std::endl;
-            std::fstream output(path_to_destination + "/" + this->name, std::ios::binary | std::ios::out);
-            assert( output.is_open() );
-            comp.save_text(output);
-            output.close();
+            progress_counter++;
+            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
         }
-    }
-    if ( bin_flags[3] ) {
-        std::cout << "Bit 3/8\t\t\tis true - " << std::endl;
-        throw FlagReservedException();
-    }
-    if ( bin_flags[4] ) {
-        std::cout << "Bit 4/16\t\tis true - " << std::endl;
-        throw FlagReservedException();
-    }
-    if ( bin_flags[5] ) {
-        std::cout << "Bit 5/32\t\tis true - " << std::endl;
-        throw FlagReservedException();
-    }
-    if ( bin_flags[6] ) {
-        std::cout << "Bit 6/64\t\tis true - " << std::endl;
-        throw FlagReservedException();
-    }
-    if ( bin_flags[7] ) {
-        std::cout << "Bit 7/128\t\tis true - files are copy-pasted using notcompression." << std::endl;
-        notcompression nc;
 
-        if (decode) {
-            nc.decode(os, path_to_destination + "/" + this->name, this->compressed_size );
-        } else {
-            this->compressed_size = nc.encode( os, this->path );
+        std::cout << "Encoding finished." << std::endl;
+
+    }
+    else {
+        os.seekg(this->data_location);
+        comp.load_text( os, this->compressed_size );
+
+
+
+        if ( bin_flags[14] ) {
+            std::cout << "Bit 14/16384\tis true - " << std::endl;
+            throw FlagReservedException();
         }
-    }
-    if ( bin_flags[8] ) {
-        std::cout << "Bit 8/256\t\tis true - " << std::endl;
-        throw FlagReservedException();
-    }
-    if ( bin_flags[9] ) {
-        std::cout << "Bit 9/512\t\tis true - " << std::endl;
-        throw FlagReservedException();
-    }
-    if ( bin_flags[10] ) {
-        std::cout << "Bit 10/1024\t\tis true - " << std::endl;
-        throw FlagReservedException();
-    }
-    if ( bin_flags[11] ) {
-        std::cout << "Bit 11/2048\t\tis true - " << std::endl;
-        throw FlagReservedException();
-    }
-    if ( bin_flags[12] ) {
-        std::cout << "Bit 12/4096\t\tis true - " << std::endl;
-        throw FlagReservedException();
-    }
-    if ( bin_flags[13] ) {
-        std::cout << "Bit 13/8192\t\tis true - " << std::endl;
-        throw FlagReservedException();
-    }
-    if ( bin_flags[14] ) {
-        std::cout << "Bit 14/16384\tis true - " << std::endl;
-        throw FlagReservedException();
-    }
-    if ( bin_flags[15] ) {
-        std::cout << "Bit 15/32768\tis true - last 40 bytes of file data are SHA-1 hash." << std::endl;
-        integrity_validation iv;
-        if (!decode) { // if (encode)
-            std::basic_string<char> sha_not_encoded = iv.get_SHA1(this->path);
-            assert( sha_not_encoded.length() == 40 );
-            os.write( sha_not_encoded.c_str(), sha_not_encoded.length() );
-        } else { // decoding
+
+        if ( bin_flags[13] ) {
+            std::cout << "Bit 13/8192\t\tis true - " << std::endl;
+            throw FlagReservedException();
+        }
+
+        if ( bin_flags[12] ) {
+            std::cout << "Bit 12/4096\t\tis true - " << std::endl;
+            throw FlagReservedException();
+        }
+
+        if ( bin_flags[11] ) {
+            std::cout << "Bit 11/2048\t\tis true - " << std::endl;
+            throw FlagReservedException();
+        }
+
+        if ( bin_flags[10] ) {
+            std::cout << "Bit 10/1024\t\tis true - " << std::endl;
+            throw FlagReservedException();
+        }
+
+        if ( bin_flags[9] ) {
+            std::cout << "Bit 9/512\t\tis true - " << std::endl;
+            throw FlagReservedException();
+        }
+
+        if ( bin_flags[8] ) {
+            std::cout << "Bit 8/256\t\tis true - " << std::endl;
+            throw FlagReservedException();
+        }
+
+        if ( bin_flags[7] ) {
+            std::cout << "Bit 7/128\t\tis true - " << std::endl;
+            throw FlagReservedException();
+        }
+
+        if ( bin_flags[6] ) {
+            std::cout << "Bit 6/64\t\tis true - " << std::endl;
+            throw FlagReservedException();
+        }
+
+        if ( bin_flags[5] ) {
+            std::cout << "Bit 5/32\t\tis true - " << std::endl;
+            throw FlagReservedException();
+        }
+
+        if ( bin_flags[4] ) {
+            std::cout << "AC2 decoding..." << std::endl;
+            comp.AC2_reverse();
+            progress_counter++;
+            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+        }
+
+        if ( bin_flags[3] ) {
+            std::cout << "AC decoding..." << std::endl;
+            comp.AC_reverse();
+            progress_counter++;
+            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+        }
+
+        if ( bin_flags[2] ) {
+            std::cout << "RLE decoding..." << std::endl;
+            comp.RLE_reverseV2();
+            progress_counter++;
+            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+        }
+
+        if ( bin_flags[1] ) {
+            std::cout << "MTF decoding..." << std::endl;
+            comp.MTF_reverse();
+            progress_counter++;
+            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+        }
+
+        if ( bin_flags[0] ) {
+            std::cout << "BWT decoding..." << std::endl;
+            comp.BWT_reverse();
+            progress_counter++;
+            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+        }
+
+
+        std::cout << "Decoding path: " << path_to_destination << std::endl;
+        std::fstream output(path_to_destination + "/" + this->name, std::ios::binary | std::ios::out);
+        assert( output.is_open() );
+        comp.save_text(output);
+        output.close();
+        std::cout << "Decoding finished." << std::endl;
+
+        if ( bin_flags[15] and validate_integrity ) {
+            std::cout << "Comparing SHA-1..." << std::endl;
+            integrity_validation iv;
+
             std::string sha_before_encoding = std::string( 40, ' ');
             os.read( &sha_before_encoding[0], 40 );
-            std::string sha_after_decoding = iv.get_SHA1( path_to_destination + "/" + this->name );
-            if ( sha_after_decoding == sha_before_encoding )
-                std::cout << "File integrity confirmed.\n" << "before: " << sha_before_encoding << "\nafter:  " << sha_after_decoding << std::endl;
-            else
-                std::cout << "File integrity compromised!!!\n" << "before: " << sha_before_encoding << "\nafter:  " << sha_after_decoding << std::endl;
+            std::string sha_after_decoding = iv.get_SHA1( path_to_destination + "/" + this->name, aborting_var );
+            if ( !aborting_var ) {
+                if ( sha_after_decoding == sha_before_encoding )
+                    std::cout << "File integrity confirmed.\n" << "before: " << sha_before_encoding << "\nafter:  " << sha_after_decoding << std::endl;
+                else
+                    std::cout << "File integrity compromised!!!\n" << "before: " << sha_before_encoding << "\nafter:  " << sha_after_decoding << std::endl;
+            }
+            progress_counter++;
+            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
         }
-
     }
 }
+
 
 void file::recursive_print(std::ostream &os) const {
     os << *this << '\n';
@@ -199,22 +328,23 @@ void file::parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_pt
 
 }
 
-void file::write_to_archive( std::fstream &archive_file ) {
-
-    if (!this->alreadySaved) {
+void file::write_to_archive( std::fstream &archive_file, bool& aborting_var, bool write_siblings ) {
+    std::cout << "name of this file is: " << this->name << std::endl;
+    if (!this->alreadySaved and !aborting_var) {
         this->alreadySaved = true;
         location = archive_file.tellp();
 
-        if (parent_ptr != nullptr) { // correcting current file's location in model, and in file
+        if (parent_ptr != nullptr) {
+            // correcting current file's location in model, and in the file
             if ( parent_ptr->child_file_ptr.get() == this ) {
-               // std::cout << " parent_ptr->child_file_ptr.get() == this" << std::endl;
+
                 uint64_t backup_p = archive_file.tellp();
 
                 archive_file.seekp( parent_ptr->location + 1 + parent_ptr->name_length + 24 ); // seekp( start of child_file_location in archive file )
                 auto buffer = new uint8_t[8];
 
                 for (uint8_t i=0; i < 8; i++)
-                    buffer[i] = ( location >> (i*8u)) & 0xFFu; // Potentially fixed?
+                    buffer[i] = ( location >> (i*8u)) & 0xFFu;
 
                 archive_file.write((char*)buffer, 8);
                 delete[] buffer;
@@ -231,14 +361,14 @@ void file::write_to_archive( std::fstream &archive_file ) {
                     else
                         break;
                 }
-                // std::cout << name << "\t" << location << std::endl;
+
 
                 uint64_t backup_p = archive_file.tellp();
                 archive_file.seekp( file_ptr->location + 1 + file_ptr->name_length + 8 ); // seekp( start of sibling_location in archive file )
                 auto buffer = new uint8_t[8];
 
                 for (uint8_t i=0; i < 8; i++)
-                    buffer[i] = ( location >> (i*8u)) & 0xFFu; // Potentially fixed?
+                    buffer[i] = ( location >> (i*8u)) & 0xFFu;
 
                 archive_file.write((char*)buffer, 8);
                 delete[] buffer;
@@ -268,18 +398,18 @@ void file::write_to_archive( std::fstream &archive_file ) {
 
         if (sibling_ptr)
             for (uint8_t i=0; i < 8; i++)
-                buffer[bi+i] = (sibling_ptr->location >> (i*8u)) & 0xFFu;
+                buffer[bi+i] = (sibling_ptr->location >> (i * 8u)) & 0xFFu;
         else
             for (uint8_t i = 0; i < 8; i++)
                 buffer[bi + i] = 0;
         bi+=8;
 
         for (uint8_t i=0; i < 2; i++)
-            buffer[bi+i] = ((unsigned)flags_value >> (i*8u)) & 0xFFu;
+            buffer[bi+i] = ((unsigned)flags_value >> (i * 8u)) & 0xFFu;
         bi+=2;
 
         for (uint8_t i=0; i < 8; i++)
-            buffer[bi+i] = (data_location >> (i*8u)) & 0xFFu;
+            buffer[bi+i] = (data_location >> (i * 8u)) & 0xFFu;
         bi+=8;
 
         for (uint8_t i=0; i < 8; i++)
@@ -298,7 +428,8 @@ void file::write_to_archive( std::fstream &archive_file ) {
 
         data_location = backup_end_of_metadata;
 
-        interpret_flags( archive_file, "encoding has it's path in the file object", false );
+        // encoding
+        interpret_flags( archive_file, "encoding has it's path in the file object", true, aborting_var );
 
         std::cout << "compressed size: " << compressed_size << std::endl;
 
@@ -310,7 +441,7 @@ void file::write_to_archive( std::fstream &archive_file ) {
         auto buffer2 = new uint8_t[16];
 
         for (uint8_t i=0; i < 8; i++)
-            buffer2[i] = (data_location >> (i*8u)) & 0xFFu; // Potentially fixed?
+            buffer2[i] = (data_location >> (i*8u)) & 0xFFu;
         for (uint8_t i=0; i < 8; i++)
             buffer2[i+8] = (compressed_size >> (i*8u)) & 0xFFu;
 
@@ -320,22 +451,18 @@ void file::write_to_archive( std::fstream &archive_file ) {
         archive_file.seekp( backup_p );
     }
 
-    if (sibling_ptr) sibling_ptr->write_to_archive( archive_file );
+    if (sibling_ptr and write_siblings and !aborting_var) sibling_ptr->write_to_archive( archive_file, aborting_var, write_siblings );
 
 }
 
-void file::unpack( const std::string& path_to_destination, std::fstream &os, bool unpack_all )
+void file::unpack( const std::string& path_to_destination, std::fstream &os, bool& aborting_var, bool unpack_all, bool validate_integrity, uint16_t* progress_var )
 {
     std::cout << "Unpacking file " << name << "..." << std::endl;
 
     uint64_t backup_g = os.tellg();
     os.seekg( this->data_location );
 
-    //notcompression nc;
-    // std::fstream f( path_to_destination + "/" + name, std::ios::out | std::ios::binary );
-
-    interpret_flags( os, path_to_destination, true );
-    //nc.decode( os, path_to_destination + "/" + name, compressed_size );
+    interpret_flags( os, path_to_destination, false, aborting_var, validate_integrity, progress_var );
 
     os.seekg( backup_g );
 
@@ -343,10 +470,53 @@ void file::unpack( const std::string& path_to_destination, std::fstream &os, boo
 
     if (sibling_ptr != nullptr and unpack_all)
     {
-        sibling_ptr->unpack( path_to_destination, os, unpack_all );
+        sibling_ptr->unpack( path_to_destination, os, aborting_var, unpack_all, validate_integrity, progress_var );
     }
 
 }
+
+std::string file::get_compressed_filesize_str() {
+    std::string units[5] = {"B","KB","MB","GB","TB"};
+
+    float filesize = this->compressed_size;
+    uint16_t unit_i = 0;
+    for (uint16_t i=0; i<5; ++i) {
+        if (filesize > 1000) {
+            filesize /= 1000;
+            unit_i++;
+        }
+        else break;
+    }
+    if ( unit_i != 0 ) {
+        std::string output = std::to_string(std::lround(filesize*10));
+        output.insert(output.length()-1, 1, '.');
+
+        return output + ' ' + units[unit_i];
+    }
+    else return std::to_string(std::lround(filesize)) + " " + units[unit_i];
+}
+
+std::string file::get_uncompressed_filesize_str() {
+    std::string units[5] = {"B","KB","MB","GB","TB"};
+
+    float filesize = this->uncompressed_size;
+    uint16_t unit_i = 0;
+    for (uint16_t i=0; i<5; ++i) {
+        if (filesize > 1000) {
+            filesize /= 1000;
+            unit_i++;
+        }
+        else break;
+    }
+    if ( unit_i != 0 ) {
+        std::string output = std::to_string(std::lround(filesize*10));
+        output.insert(output.length()-1, 1, '.');
+
+        return output + ' ' + units[unit_i];
+    }
+    else return std::to_string(std::lround(filesize)) + " " + units[unit_i];
+}
+
 
 
 
@@ -442,18 +612,18 @@ void folder::parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_
     }
 }
 
-void folder::append_to_archive( std::fstream& archive_file ) {
+void folder::append_to_archive( std::fstream& archive_file, bool& aborting_var ) {
     // archive_file.flush();
     archive_file.seekp(0, std::ios_base::end);
-    this->write_to_archive( archive_file );
+    this->write_to_archive( archive_file, aborting_var );
 }
 
-void file::append_to_archive( std::fstream& archive_file ) {
+void file::append_to_archive( std::fstream& archive_file, bool& aborting_var, bool write_siblings ) {
     archive_file.seekp(0, std::ios_base::end);
-    this->write_to_archive( archive_file );
+    this->write_to_archive( archive_file, aborting_var, write_siblings );
 }
 
-void folder::write_to_archive( std::fstream &archive_file ) {
+void folder::write_to_archive( std::fstream &archive_file, bool& aborting_var ) {
 
     if (!this->alreadySaved) {
         this->alreadySaved = true;
@@ -557,32 +727,86 @@ void folder::write_to_archive( std::fstream &archive_file ) {
     }
 
     if (sibling_ptr)
-        sibling_ptr->write_to_archive( archive_file );
+        sibling_ptr->write_to_archive( archive_file, aborting_var );
 
     if (child_file_ptr)
-        child_file_ptr->write_to_archive( archive_file );
+        child_file_ptr->write_to_archive( archive_file, aborting_var );
 
     if (child_dir_ptr)
-        child_dir_ptr->write_to_archive( archive_file );
+        child_dir_ptr->write_to_archive( archive_file, aborting_var );
 
 }
 
-void folder::unpack( const std::filesystem::path& target_path, std::fstream &os, bool unpack_all ) const
+void folder::unpack( const std::filesystem::path& target_path, std::fstream &os, bool& aborting_var, bool unpack_all ) const
 {
-    std::cout << "Creating folder " << name << "..." << std::endl;
-    std::filesystem::path path_with_this_folder( target_path.string() + '/' + name );
+    std::string temp_name;
+    if (this->parent_ptr == nullptr) temp_name = std::filesystem::path(this->name).stem();
+    else temp_name = this->name;
+    std::cout << "Creating folder " << temp_name << "..." << std::endl;
+    std::filesystem::path path_with_this_folder( target_path.string() + '/' + temp_name );
     if ( !std::filesystem::exists(path_with_this_folder) )
         std::filesystem::create_directories( path_with_this_folder );
 
-    std::cout << "Folder " << name << " created\n" << std::endl;
+    std::cout << "Folder " << temp_name << " created\n" << std::endl;
 
     if (unpack_all) {
         if( sibling_ptr != nullptr )
-            sibling_ptr->unpack(target_path, os, unpack_all);
+            sibling_ptr->unpack(target_path, os, aborting_var, unpack_all);
         if( child_dir_ptr != nullptr )
-            child_dir_ptr->unpack( path_with_this_folder, os, unpack_all);
+            child_dir_ptr->unpack( path_with_this_folder, os, aborting_var, unpack_all);
         if( child_file_ptr != nullptr )
-            child_file_ptr->unpack( path_with_this_folder, os, unpack_all);
+            child_file_ptr->unpack( path_with_this_folder, os, aborting_var, unpack_all);
     }
 
 }
+
+void folder::get_ptrs( std::vector<folder*>& folders, std::vector<file*>& files ) {
+    if ( !this->ptr_already_gotten ) {
+        folders.emplace_back( this );
+        this->ptr_already_gotten = true;
+    }
+
+    if (this->child_dir_ptr.get() != nullptr) this->child_dir_ptr->get_ptrs( folders, files );
+    if (this->child_file_ptr.get() != nullptr) this->child_file_ptr->get_ptrs( files, true );
+
+}
+
+void file::get_ptrs( std::vector<file*>& files, bool get_siblings_too ) {
+    if ( !this->ptr_already_gotten ) {
+        files.emplace_back( this );
+        this->ptr_already_gotten = true;
+    }
+
+    if ( this->sibling_ptr.get() != nullptr and get_siblings_too ) this->sibling_ptr->get_ptrs( files, get_siblings_too );
+}
+
+
+void folder::set_path( std::filesystem::path extraction_path, bool set_all_paths ) {
+    auto folder_path = extraction_path;
+    if ( this->ptr_already_gotten ) {
+        folder_path.append(this->name);
+        this->path = folder_path;
+    }
+
+    if (this->child_dir_ptr.get() != nullptr and set_all_paths) this->child_dir_ptr->set_path( folder_path, set_all_paths );
+    if (this->child_file_ptr.get() != nullptr and set_all_paths) this->child_file_ptr->set_path( folder_path, set_all_paths );
+}
+
+void file::set_path( std::filesystem::path extraction_path, bool set_all_paths ) {
+    if ( this->ptr_already_gotten ) this->path = extraction_path;
+
+    if ( this->sibling_ptr.get() != nullptr and set_all_paths ) this->sibling_ptr->set_path( extraction_path, set_all_paths );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
