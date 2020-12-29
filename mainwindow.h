@@ -54,7 +54,7 @@ private slots:
 
     void on_buttonAddNewFolder_clicked();
 
-    void on_buttonTest_clicked();
+    void openSettingsDialog();
 
 private:
     Ui::MainWindow *ui;
@@ -69,8 +69,8 @@ public:
     archive* archive_ptr;
 
 
-    TreeWidgetFolder(QTreeWidgetItem *parent, folder* ptr_to_folder, archive* ptr_to_archive );
-    TreeWidgetFolder(TreeWidgetFolder *parent, folder* ptr_to_folder, archive* ptr_to_archive );
+    TreeWidgetFolder(QTreeWidgetItem *parent, folder* ptr_to_folder, archive* ptr_to_archive, bool filesize_scaled );
+    TreeWidgetFolder(TreeWidgetFolder *parent, folder* ptr_to_folder, archive* ptr_to_archive, bool filesize_scaled );
 
     void unpack( std::string path_for_extraction, bool& aborting_var );
     void setDisabled(bool disabled);
@@ -85,7 +85,7 @@ public:
     file* file_ptr;
     archive* archive_ptr;
 
-    TreeWidgetFile(TreeWidgetFolder *parent, file* ptr_to_file, archive* ptr_to_archive );
+    TreeWidgetFile(TreeWidgetFolder *parent, file* ptr_to_file, archive* ptr_to_archive, bool filesize_scaled );
 
     void unpack( std::string path_for_extraction, bool& aborting_var );
     void setDisabled(bool disabled);

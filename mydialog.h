@@ -105,7 +105,7 @@ class thread_compression : public QObject
 {
     Q_OBJECT
 public:
-    explicit thread_compression( std::vector<file*> file_list );
+    explicit thread_compression( std::vector<file*> file_list, uint16_t* progress_ptr );
     ~thread_compression();
     void start();
 
@@ -113,6 +113,7 @@ public:
     std::fstream temp_output;
     std::filesystem::path temp_path;
     bool aborting_variable;
+    uint16_t* progress_step;
 
 
 

@@ -81,8 +81,8 @@ struct file
     uint16_t flags_value=0;                         // 16 flags represented as 16-bit int
 
     uint64_t data_location=0;                       // location of data in archive (in bytes)
-    uint64_t compressed_size=0;                     // size of data (in bytes)
-    uint64_t uncompressed_size=0;                   // size of compressed data in _B_I_T_S_
+    uint64_t compressed_size=0;                     // size of compressed data (in bytes)
+    uint64_t uncompressed_size=0;                   // size of data before compression (in bytes)
 
     static const bool dont_abort = false;
 
@@ -94,22 +94,20 @@ struct file
 
     void parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_ptr<file> &shared_this );
 
-    void append_to_archive( std::fstream& archive_file, bool& aborting_var, bool write_siblings = true );
+    void append_to_archive( std::fstream& archive_file, bool& aborting_var, bool write_siblings = true, uint16_t* progress_var = nullptr );
 
-    void write_to_archive( std::fstream& archive_file, bool& aborting_var, bool write_siblings = true );
+    void write_to_archive( std::fstream& archive_file, bool& aborting_var, bool write_siblings = true, uint16_t* progress_var = nullptr );
 
     void unpack( const std::string& path, std::fstream &os, bool& aborting_var, bool unpack_all, bool validate_integrity = true, uint16_t* progress_var = nullptr );
 
-    std::string get_compressed_filesize_str();
+    std::string get_compressed_filesize_str(bool scaled);
 
-    std::string get_uncompressed_filesize_str();
+    std::string get_uncompressed_filesize_str(bool scaled);
 
     void get_ptrs( std::vector<file*>& files, bool get_siblings_too = false );
 
     void set_path( std::filesystem::path extraction_path, bool set_all_paths );
 
-
-    // void interpret_flags( uint16_t flags );
 };
 
 #endif //EXPERIMENTAL_ARCHIVE_STRUCTURES_H

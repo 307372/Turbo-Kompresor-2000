@@ -36,6 +36,8 @@ void Config::parse()
             {
             case 0: extraction_path = buffer; break;
 
+            case 1: filesize_scaling = (buffer[0] == '1'); break;
+
             default: assert(false);
             }
 
@@ -64,7 +66,10 @@ void Config::save()
 
     config_file << "## Configuration file for Turbo Kompresor 2000\n"
                 << "## Saved extraction path:\n"
-                << extraction_path.string() << '\n';
+                << extraction_path.string() << '\n'
+                << "## Are file sizes scaled?\n"
+                << "## 0 - no, 1 - yes\n"
+                << (int)filesize_scaling << '\n';
 
     if (config_file.is_open()) config_file.close();
 }
@@ -80,7 +85,10 @@ void Config::save_default()
 
     config_file << "## Configuration file for Turbo Kompresor 2000\n"
                 << "## Saved extraction path:\n"
-                << std::filesystem::current_path().string() << '\n';
+                << std::filesystem::current_path().string() << '\n'
+                << "## Are file sizes scaled?\n"
+                << "## 0 - no, 1 - yes\n"
+                << 1 << '\n';
 
 
 

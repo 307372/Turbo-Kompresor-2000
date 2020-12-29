@@ -74,7 +74,7 @@ public:
     uint8_t bitcounter{};               // counts how many bits were added to buffer[bi]
     uint64_t data_left_b;               // data left (in bits)
     //uint16_t buffer_size;
-    uint16_t bits_left_in_buffer;
+    uint16_t bits_in_last_byte;
     uint16_t meaningful_bits;
     bool output_bit;
     uint8_t* text;

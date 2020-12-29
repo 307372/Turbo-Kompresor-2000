@@ -104,6 +104,7 @@ void Compression::BWT_make() {
 
         for (uint32_t i=0; i < n+4; ++i) {
             this->text[i] = encoded[i];
+            //std::cout << (uint16_t)text[i] << std::endl;
         }
 
         this->size = n+4;
@@ -530,6 +531,7 @@ void Compression::RLE_reverseV2() {
 
 
 void Compression::AC_make() {
+
     if (!*aborting_var) {
         //  arithmetic coding - file size version
         //  based on algorithm from youtube (Information Theory playlist by mathematicalmonk, IC 5)
@@ -538,8 +540,8 @@ void Compression::AC_make() {
         uint16_t precision = 31;
         uint64_t whole = UINT_MAX;
         long double wholed = UINT_MAX;
-        uint64_t half = roundl(wholed/2.0);
-        uint64_t quarter = roundl(wholed/4.0);
+        uint64_t half = roundl(wholed / 2.0);
+        uint64_t quarter = roundl(wholed / 4.0);
 
 
         statistical_tools st;
@@ -553,25 +555,21 @@ void Compression::AC_make() {
 
         for (uint8_t i=0; i < 4; i++) {
             output[4+i] = (uint8_t)( this->size >> (i*8u)) & 0xFFu;
-            std::cout << (uint16_t)output[4+i] << " ";
+            // std::cout << (uint16_t)output[4+i] << " ";
         }
         std::cout << std::endl;
 
 
 
+        std::vector<uint64_t> c;
+        std::vector<uint64_t> d;
         for (uint16_t i=0; i < r_size; i++) {
             output[8 + 4 * i] = st.r[i] & 0xFFu;
             output[8 + 4 * i + 1] = (st.r[i] >> 8u) & 0xFFu;
             output[8 + 4 * i + 2] = (st.r[i] >> 16u) & 0xFFu;
             output[8 + 4 * i + 3] = (st.r[i] >> 24u) & 0xFFu;
-        }
 
-
-
-        std::vector<uint64_t> c;
-        std::vector<uint64_t> d;
-        for (uint16_t i=0; i < r_size; i++) // generate c and d, where c[i] is lower bound to get i-th letter of our alphabet, and d[i] is the upper bound
-        {
+            // generate c and d, where c[i] is lower bound to get i-th letter of our alphabet, and d[i] is the upper bound
             uint64_t sum = 0;
             std::for_each(std::begin(st.r), std::begin(st.r)+i, [&] (uint64_t j) {sum += j;} );
             c.push_back(sum);
@@ -595,6 +593,7 @@ void Compression::AC_make() {
         //Actual encoding
         uint64_t a = 0;
         uint64_t b = whole;
+        uint64_t w = 0;
         uint32_t s = 0;
 
         Text_write_bitbuffer bitout(output );
@@ -604,42 +603,41 @@ void Compression::AC_make() {
         for (uint32_t i = 0; i <this->size and !*aborting_var; ++i)
         {
 
-            uint64_t w = b-a;
+            if (i == 6676422) {
+                std::cout << "dzieja sie rzeczy" << std::endl;
+            }
+
+            w = b - a;
 
             b = a + roundl(((uint64_t)(d[this->text[i]]*w))/wholed); //potential rounding errors
-
             a = a + roundl(((uint64_t)(c[this->text[i]]*w))/wholed);
+
             assert( a<whole and b<=whole );
             assert( a<b );
-            while (b < half or a > half)
+
+            while (b < half or a >= half)
             {
                 if (b < half)
                 {
-                    //wynik += "0";
                     bitout.add_bit_0();
-                    for (uint32_t j = 0; j < s; j++) {
-                        //wynik += "1";
-                        bitout.add_bit_1();
-                    }
+                    for (uint32_t j = 0; j < s; j++) bitout.add_bit_1();
+
                     s = 0;
                     a *= 2;
                     b *= 2;
                 }
-                else if (a > half)
+                else if (a >= half)
                 {
 
-                    //wynik += "1";
                     bitout.add_bit_1();
-                    for (uint32_t j = 0; j < s; j++) {
-                        //wynik += "0";
-                        bitout.add_bit_0();
-                    }
+                    for (uint32_t j = 0; j < s; j++) bitout.add_bit_0();
+
                     s = 0;
                     a = 2 * (a-half);
                     b = 2 * (b-half);
                 }
             }
-            while (a > quarter and b < 3*quarter)
+            while (a >= quarter and b < 3*quarter)
             {
                 s++;
                 a = 2 * (a-quarter);
@@ -650,24 +648,19 @@ void Compression::AC_make() {
         s++;
         if (a <= quarter)
         {
-            //wynik += "0";
             bitout.add_bit_0();
-            for (uint32_t j = 0; j < s; j++) {
-                //wynik += "1";
-                bitout.add_bit_1();
-            }
+            for (uint32_t j = 0; j < s; j++) bitout.add_bit_1();
         }
         else
         {
-            //wynik += "1";
             bitout.add_bit_1();
-            for (uint32_t j = 0; j < s; j++) {
-                //wynik += "0";
-                bitout.add_bit_0();
-            }
+            for (uint32_t j = 0; j < s; j++) bitout.add_bit_0();
         }
 
         bitout.flush();
+        std::cout << "bitout flushed" << std::endl;
+        bitout.flush();
+        std::cout << "bitout flushed again" << std::endl;
 
         if (*aborting_var) return;
 
@@ -706,8 +699,6 @@ void Compression::AC_reverse() {
         uint32_t compressed_file_size = ((uint32_t)this->text[0]) | ((uint32_t)this->text[1]<<8u) | ((uint32_t)this->text[2]<<16u) | ((uint32_t)this->text[3]<<24u);
         uint32_t uncompressed_file_size = ((uint32_t)this->text[4]) | ((uint32_t)this->text[5]<<8u) | ((uint32_t)this->text[6]<<16u) | ((uint32_t)this->text[7]<<24u);
 
-        std::cout << "AC-compressed_file_size: " << compressed_file_size << "\nAC-uncompressed_file_size: " << uncompressed_file_size << std::endl;
-
         uint8_t r_buffer[256*4];
         for (uint16_t i=0; i<r_size*4; ++i) r_buffer[i] = this->text[i+8];  // r array starts after 8 bytes
         for ( uint16_t i=0; i < r_size; i++ )
@@ -722,16 +713,15 @@ void Compression::AC_reverse() {
             if (rn != 0) {
                 alphabet += char(i);
                 sum += rn;
-                c.push_back(sum);
+                if (i != 255) c.push_back(sum);
                 d.push_back(sum);
             }
         }
-        d.push_back( whole );
 
         auto t1 = std::chrono::high_resolution_clock::now();
 
 
-        Text_read_bitbuffer in_bit(this->text, compressed_file_size);
+        Text_read_bitbuffer in_bit(this->text, compressed_file_size, 4+4+256*4);
 
         uint64_t a = 0;
         uint64_t b = whole;
@@ -744,11 +734,7 @@ void Compression::AC_reverse() {
         uint64_t i = 0;
         while ( i<=precision and i < compressed_file_size )
         {
-
-            if (in_bit.getbit()) //if bit's value == 1
-            {
-                z += (1ull<<(precision-i));
-            }
+            if (in_bit.getbit()) z += (1ull<<(precision-i)); //if bit's value == 1
             i++;
         }
 
@@ -770,26 +756,26 @@ void Compression::AC_reverse() {
 
         while (!*aborting_var)
         {
-            //t0 = std::chrono::high_resolution_clock::now();
 
-            if (output_size_counter == uncompressed_file_size-1) {
-                std::cout << "rzeczy sie dzieja" << std::endl;
+            if (output_size_counter == 6676422) {
+                std::cout << "dzieja sie rzeczy" << std::endl;
             }
 
             w = b - a;
-            uint16_t j = std::distance(c.begin(), std::lower_bound(c.begin(), c.end(), (z - a) * wholed / w));
+            assert( z>=a and w<=whole );
+
+            uint64_t searched = floorl((long double)(z - a) * wholed / (long double)w);
+            int16_t j = std::upper_bound(d.begin(), d.end(), searched ) - d.begin();
 
             b0 = a + roundl(d[j] * w / wholed); //potential rounding errors
-            a0 = a + roundl(c[j] * w / wholed);
-            if (a0 > z) {
-                //std::cout << "pomniejszono\n";
-                j--;
+            if (b0 <= z) {
+                j++;
                 b0 = a + roundl(d[j] * w / wholed); //potential rounding errors
-                a0 = a + roundl(c[j] * w / wholed);
             }
-
-            assert(((a0 <= z) and (z <= b0)));
-            assert(a0 <= whole and b0 <= whole);
+            a0 = a + roundl(c[j] * w / wholed);
+            assert( j>=0 and j < alphabet.length() );
+            assert(((a0 <= z) and (z < b0)));
+            assert(a0 < whole and b0 <= whole);
             assert(a <= whole);
             assert(b <= whole);
             assert(a < b);
@@ -806,7 +792,7 @@ void Compression::AC_reverse() {
             }
 
             //t1 = std::chrono::high_resolution_clock::now();
-            while (b < half or a > half)
+            while (b < half or a >= half)
             {
                 if (b < half)
                 {
@@ -814,25 +800,27 @@ void Compression::AC_reverse() {
                     b <<= 1u;
                     z <<= 1u;
                 }
-                else if (a > half)
+                else if (a >= half)
                 {
                     a = (a-half)<<1u;
                     b = (b-half)<<1u;
                     z = (z-half)<<1u;
                 }
 
-                if (i <= compressed_file_size )
-                    if ( in_bit.getbit() ) z++;
-                i++;
+                if (i < compressed_file_size ) {
+                    if (in_bit.getbit()) z++;
+                    i++;
+                }
             }
-            while (a > quarter and b < 3*quarter)
+            while (a >= quarter and b < 3*quarter)
             {
                 a = (a-quarter)<<1u;
                 b = (b-quarter)<<1u;
                 z = (z-quarter)<<1u;
-                if (i <= compressed_file_size)
-                    if ( in_bit.getbit() ) z++;
-                i++;
+                if (i < compressed_file_size) {
+                    if (in_bit.getbit()) z++;
+                    i++;
+                }
             }
             //t2 = std::chrono::high_resolution_clock::now();
 
@@ -951,7 +939,6 @@ void Compression::AC2_make() {
 
             assert(a < whole and b <= whole);
             assert(a < b);
-
             while (b < half or a >= half) {
                 if (b < half) {
                     //wynik += "0";
@@ -1001,6 +988,8 @@ void Compression::AC2_make() {
         }
 
         bitout.flush();
+
+
 
         if (*aborting_var) return;
 
@@ -1121,9 +1110,15 @@ void Compression::AC2_reverse() {
             if (in_bit.getbit()) //if bit's value == 1
             {
                 z += (1ull<<(precision-i));
+                //std::cout << '1';
             }
+            //else std::cout << '0';
             i++;
         }
+        std::cout << std::endl;
+
+        //if ( i == compressed_file_size ) z >>= precision-i+1;
+
 
 
         std::string output;
@@ -1221,9 +1216,10 @@ void Compression::AC2_reverse() {
                     z = (z-half)*2;
                 }
 
-                if (i <= compressed_file_size )
-                    if ( in_bit.getbit() ) z++;
-                i++;
+                if (i < compressed_file_size ) {
+                    if (in_bit.getbit()) z++;
+                    i++;
+                }
                 assert( z <= b );
             }
             while (a >= quarter and b < 3*quarter)
@@ -1231,9 +1227,10 @@ void Compression::AC2_reverse() {
                 a = (a-quarter)*2;
                 b = (b-quarter)*2;
                 z = (z-quarter)*2;
-                if (i <= compressed_file_size)
+                if (i < compressed_file_size) {
                     if ( in_bit.getbit() ) z++;
-                i++;
+                    i++;
+                }
                 assert( z <= b );
             }
             //t2 = std::chrono::high_resolution_clock::now();
@@ -1287,11 +1284,21 @@ void Text_write_bitbuffer::clear() {
 }
 
 void Text_write_bitbuffer::flush() {
-    if (bitcounter > 0)
+    if (bitcounter > 0)// for (uint32_t i=0; i <= bi+1; ++i) text->push_back(buffer[i]);
+    {
         text->append( (char*)buffer, bi+1 );
-
-    else
+        std::cout << "buffer has stuff left in it, bi = " << bi << '\n';
+    }
+    else //for (uint32_t i=0; i <= bi; ++i) text->push_back(buffer[i]);
+    {
+        //std::string a(*text);
         text->append( (char*)buffer, bi );
+        //if (a.length() == text->length()) for (uint32_t i=0; i < text->length(); ++i) if (a[i] != (*text)[i]) std::cout << i << '\t' << a[i] << '\t' << (*text)[i] << '\n';
+        //std::cout << sum_of_outputted_bits << std::endl;
+        // if (a != *text) std::cout << "mamy to" << std::endl;
+        //std::cout << "No leftover in buffer\t";
+        //std::cout << "a.len = " << a.length() << "\tb.len =" << text->length() << '\n';
+    }
 
     clear();
 }
@@ -1304,17 +1311,19 @@ void Text_write_bitbuffer::add_bit_1() {
     if ( bitcounter == 8 ) {
         bi++;
         bitcounter = 0;
+        //buffer[bi] = 0;
         if (bi >= 8*1024) flush();
     }
 }
 
 void Text_write_bitbuffer::add_bit_0() {
     buffer[bi] <<= 1u;
-    sum_of_outputted_bits++;
     bitcounter++;
+    sum_of_outputted_bits++;
     if ( bitcounter == 8 ) {
         bi++;
         bitcounter = 0;
+        //buffer[bi] = 0;
         if (bi >= 8*1024) flush();
     }
 }
@@ -1334,22 +1343,29 @@ Text_read_bitbuffer::Text_read_bitbuffer(uint8_t compressed_text[], uint64_t com
 
     this->output_bit = false;
 
-    this->bits_left_in_buffer = compressed_size%8;
-    this->meaningful_bits = 8;
+    this->bits_in_last_byte = compressed_size % 8;
+    if (compressed_size > 8) this->meaningful_bits = 8;
+    else this->meaningful_bits = compressed_size;
     this->bitcounter = 0;
 
 }
 
 bool Text_read_bitbuffer::getbit() {
     output_bit = (text[byte_index] >> (meaningful_bits-bitcounter-1u)) & 1u; // probably not finished yet
+    if (meaningful_bits-bitcounter-1u < 0 or meaningful_bits-bitcounter-1u > 7)
+    {
+        std::cout << "meaningful bits minus stuff: " << meaningful_bits-bitcounter-1u << std::endl;
+    }
     bitcounter++;
     if(bitcounter == 8) {
-        byte_index++;
         bitcounter = 0;
+        byte_index++;
         if (byte_index == data_left_b-1) {
             //std::cout << "zadzialalo" << std::endl;
-            meaningful_bits = bits_left_in_buffer;
+            if (bits_in_last_byte != 0) meaningful_bits = bits_in_last_byte;
+            else meaningful_bits = 8;
         }
     }
     return output_bit; // (buffer[bi] >> bitcounter-1) & 1u;
 }
+

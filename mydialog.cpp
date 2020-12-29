@@ -143,6 +143,10 @@ uint16_t MyDialog::get_flags() {
     case 0:     // SHA-1
         flags[15] = true;
         break;
+
+    case 1:     // CRC-32
+        flags[14] = true;
+        break;
     }
 
 
@@ -212,7 +216,8 @@ void MyDialog::on_pushButton_compress_clicked()
     }
     else assert(false); // should never happen
 
-    th_compression = new thread_compression( list_of_files );
+    progress_step_value = 0;
+    th_compression = new thread_compression( list_of_files, &progress_step_value );
     my_thread = new QThread;
     th_compression->moveToThread(my_thread);
 
@@ -325,7 +330,7 @@ void MyDialog::on_buttonDecompressionStart_clicked()
         for (auto single_file   : files  ) std::filesystem::create_directories( single_file->path   );
     }
 
-    // now that we've got those ptrs, this property needs to be reset, just in case
+    // now that we've got those ptrs, this property needs to be reset, in case it's used later
     for (auto single_folder : folders) single_folder->ptr_already_gotten = false;
     for (auto single_file   : files  ) single_file->ptr_already_gotten = false;
 
@@ -411,12 +416,13 @@ void MyDialog::on_button_decompression_path_dialog_clicked()
 }
 
 
-thread_compression::thread_compression(std::vector<file*> given_file_list) : QObject(nullptr)
+thread_compression::thread_compression(std::vector<file*> given_file_list, uint16_t* progress_ptr) : QObject(nullptr)
 {
     temp_path = std::filesystem::temp_directory_path().append( "tk2k_archive.tmp" );
     this->file_list = given_file_list;
     // this->stream = given_stream;
     this->aborting_variable = false;
+    this->progress_step = progress_ptr;
 
 
 }
@@ -446,17 +452,18 @@ void thread_compression::start() {
 
     emit ProgressNextFile(0);
     emit ProgressNextStep(0);
-
-    for (uint16_t i=0; i < file_list.size() and !aborting_variable; ++i)
+    uint16_t i=0;
+    for (; i < file_list.size() and !aborting_variable; ++i)
     {
         std::cout << "aborting variable = " << aborting_variable << std::endl;
         emit setFilePathLabel( file_list[i]->path.data() );
 
-        file_list[i]->append_to_archive( temp_output, aborting_variable, false );
+        file_list[i]->append_to_archive( temp_output, aborting_variable, false, progress_step );
 
         emit ProgressNextFile((1.0+i)/(double)file_list.size()*100.0);
     }
 
+    emit ProgressNextStep(100);
     emit processing_finished( !aborting_variable ); // false if aborted
 
     QThread::currentThread()->quit();

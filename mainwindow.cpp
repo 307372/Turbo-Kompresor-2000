@@ -1,6 +1,6 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
-
+#include "settingsdialog.h"
 
 
 MainWindow::MainWindow(QWidget *parent)
@@ -12,9 +12,12 @@ MainWindow::MainWindow(QWidget *parent)
 
     archive_ptr = new archive();
 
-    ui->archiveWidget->setColumnWidth(0, 500);
+    ui->archiveWidget->setColumnWidth(0, 300);
     ui->archiveWidget->setSelectionMode( QAbstractItemView::SelectionMode::ExtendedSelection );
     config_ptr = new Config();
+
+    QAction *settingsAction = ui->menubar->addAction("Settings");
+    connect(settingsAction, &QAction::triggered, this, &MainWindow::openSettingsDialog);
 }
 
 MainWindow::~MainWindow()
@@ -37,7 +40,7 @@ void MainWindow::load_archive( std::string path_to_archive ) {
     this->current_archive_path = path_to_archive;
     this->archive_ptr->load( path_to_archive );
 
-    ui->archiveWidget->addTopLevelItem( new TreeWidgetFolder( ui->archiveWidget->invisibleRootItem(), archive_ptr->archive_dir.get(), archive_ptr ) );
+    ui->archiveWidget->addTopLevelItem( new TreeWidgetFolder( ui->archiveWidget->invisibleRootItem(), archive_ptr->archive_dir.get(), archive_ptr, config_ptr->get_filesize_scaling() ) );
     this->ui->archiveWidget->expandAll();
 
     this->ui->archiveWidget->sortByColumn(0, Qt::SortOrder::AscendingOrder);
@@ -59,22 +62,22 @@ void MainWindow::write_folder_to_current_archive( folder* folder_model, bool& ab
     this->reload_archive();
 }
 
-TreeWidgetFolder::TreeWidgetFolder(QTreeWidgetItem *parent, folder* ptr_to_folder, archive* ptr_to_archive  )
+TreeWidgetFolder::TreeWidgetFolder(QTreeWidgetItem *parent, folder* ptr_to_folder, archive* ptr_to_archive, bool filesize_scaled  )
 : QTreeWidgetItem(parent, QStringList() << ptr_to_folder->name.c_str(), QTreeWidgetItem::UserType+1)
 {
     this->folder_ptr = ptr_to_folder;
     this->archive_ptr = ptr_to_archive;
     this->setIcon(0, *(new QIcon(":/img/folder.png")));
 
-    if (ptr_to_folder->sibling_ptr) parent->addChild( new TreeWidgetFolder( parent, ptr_to_folder->sibling_ptr.get(), ptr_to_archive ) );
-    if (ptr_to_folder->child_dir_ptr) this->addChild( new TreeWidgetFolder( this, ptr_to_folder->child_dir_ptr.get(), ptr_to_archive ) );
-    if (ptr_to_folder->child_file_ptr) this->addChild( new TreeWidgetFile( this, ptr_to_folder->child_file_ptr.get(), ptr_to_archive ) );
+    if (ptr_to_folder->sibling_ptr) parent->addChild( new TreeWidgetFolder( parent, ptr_to_folder->sibling_ptr.get(), ptr_to_archive, filesize_scaled ) );
+    if (ptr_to_folder->child_dir_ptr) this->addChild( new TreeWidgetFolder( this, ptr_to_folder->child_dir_ptr.get(), ptr_to_archive, filesize_scaled ) );
+    if (ptr_to_folder->child_file_ptr) this->addChild( new TreeWidgetFile( this, ptr_to_folder->child_file_ptr.get(), ptr_to_archive, filesize_scaled ) );
 
 }
 
 
 
-TreeWidgetFolder::TreeWidgetFolder(TreeWidgetFolder *parent, folder* ptr_to_folder, archive* ptr_to_archive  )
+TreeWidgetFolder::TreeWidgetFolder(TreeWidgetFolder *parent, folder* ptr_to_folder, archive* ptr_to_archive, bool filesize_scaled  )
 : QTreeWidgetItem(parent, QStringList() << ptr_to_folder->name.c_str(), QTreeWidgetItem::UserType+1)
 {
     this->folder_ptr = ptr_to_folder;
@@ -82,10 +85,10 @@ TreeWidgetFolder::TreeWidgetFolder(TreeWidgetFolder *parent, folder* ptr_to_fold
     this->setIcon(0, *(new QIcon(":/img/folder.png")));
 
 
-    if (ptr_to_folder->sibling_ptr) parent->addChild( new TreeWidgetFolder( parent, ptr_to_folder->sibling_ptr.get(), ptr_to_archive ) );
+    if (ptr_to_folder->sibling_ptr) parent->addChild( new TreeWidgetFolder( parent, ptr_to_folder->sibling_ptr.get(), ptr_to_archive, filesize_scaled ) );
 
-    if (ptr_to_folder->child_dir_ptr) this->addChild( new TreeWidgetFolder( this, ptr_to_folder->child_dir_ptr.get(), ptr_to_archive ) );
-    if (ptr_to_folder->child_file_ptr) this->addChild( new TreeWidgetFile( this, ptr_to_folder->child_file_ptr.get(), ptr_to_archive ) );
+    if (ptr_to_folder->child_dir_ptr) this->addChild( new TreeWidgetFolder( this, ptr_to_folder->child_dir_ptr.get(), ptr_to_archive, filesize_scaled ) );
+    if (ptr_to_folder->child_file_ptr) this->addChild( new TreeWidgetFile( this, ptr_to_folder->child_file_ptr.get(), ptr_to_archive, filesize_scaled ) );
 }
 
 
@@ -111,8 +114,8 @@ void TreeWidgetFile::unpack( std::string path_for_extraction, bool& aborting_var
     }
 }
 
-TreeWidgetFile::TreeWidgetFile(TreeWidgetFolder *parent, file* ptr_to_file, archive* ptr_to_archive)
-: QTreeWidgetItem(parent, QStringList() << ptr_to_file->name.c_str() << QString::fromStdString(ptr_to_file->get_uncompressed_filesize_str()) << QString::fromStdString(ptr_to_file->get_compressed_filesize_str()) << QString::number((float)ptr_to_file->uncompressed_size/(float)(ptr_to_file->compressed_size)), QTreeWidgetItem::UserType+2 )
+TreeWidgetFile::TreeWidgetFile(TreeWidgetFolder *parent, file* ptr_to_file, archive* ptr_to_archive, bool filesize_scaled)
+: QTreeWidgetItem(parent, QStringList() << ptr_to_file->name.c_str() << QString::fromStdString( ptr_to_file->get_uncompressed_filesize_str(filesize_scaled)) << QString::fromStdString(ptr_to_file->get_compressed_filesize_str(filesize_scaled)) << QString::number((float)ptr_to_file->uncompressed_size/(float)(ptr_to_file->compressed_size)), QTreeWidgetItem::UserType+2 )
 {
     this->setTextAlignment(1, Qt::AlignRight);
     this->setTextAlignment(2, Qt::AlignRight);
@@ -120,7 +123,7 @@ TreeWidgetFile::TreeWidgetFile(TreeWidgetFolder *parent, file* ptr_to_file, arch
     this->file_ptr = ptr_to_file;
     this->archive_ptr = ptr_to_archive;
     this->setIcon(0, *(new QIcon(":/img/file.png")));
-    if (ptr_to_file->sibling_ptr) parent->addChild( new TreeWidgetFile( parent, ptr_to_file->sibling_ptr.get(), ptr_to_archive ) );
+    if (ptr_to_file->sibling_ptr) parent->addChild( new TreeWidgetFile( parent, ptr_to_file->sibling_ptr.get(), ptr_to_archive, filesize_scaled ) );
 }
 
 
@@ -288,23 +291,12 @@ void MainWindow::on_buttonAddNewFolder_clicked()
     }
 }
 
-
-
-
-void MainWindow::on_buttonTest_clicked()
+void MainWindow::openSettingsDialog()
 {
-    auto list = this->ui->archiveWidget->selectedItems();
-
-    if (!list.empty()) {
-        for (auto &element : list){
-            std::cout << element->type() << std::endl;
-        }
-
-    }
-
-
+    SettingsDialog* sd = new SettingsDialog(config_ptr, this);
+    sd->exec();
+    reload_archive();
 }
-
 
 bool TreeWidgetFile::operator<(const QTreeWidgetItem &other)const {
     //1001 - TreeWidgetFolder
@@ -370,8 +362,6 @@ bool TreeWidgetFile::operator<(const QTreeWidgetItem &other)const {
     }
 }
 
-
-
 bool TreeWidgetFolder::operator<(const QTreeWidgetItem &other)const {
     //1001 - TreeWidgetFolder
     //1002 - TreeWidgetFile
@@ -418,6 +408,7 @@ bool TreeWidgetFolder::operator<(const QTreeWidgetItem &other)const {
         throw NotImplementedException("Something went terribly wrong while sorting.");
     }
 }
+
 
 
 

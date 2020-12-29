@@ -22,6 +22,17 @@ void file::interpret_flags(std::fstream &os, const std::string& path_to_destinat
         comp.load_text( input, this->uncompressed_size );
 
         input.close();
+
+        std::basic_string<char> CRC32_before;
+
+        if ( bin_flags[14] ) {
+            integrity_validation iv;
+            CRC32_before = iv.get_CRC32_from_text(comp.text, comp.size, aborting_var);
+            progress_counter++;
+            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+
+        }
+
         if ( bin_flags[0] ) {
             std::cout << "BWT encoding..." << std::endl;
             comp.BWT_make();
@@ -110,11 +121,7 @@ void file::interpret_flags(std::fstream &os, const std::string& path_to_destinat
             throw FlagReservedException();
         }
 
-        if ( bin_flags[14] ) {
-            std::cout << "Bit 14/16384\tis true - " << std::endl;
 
-            throw FlagReservedException();
-        }
 
 
 
@@ -122,6 +129,18 @@ void file::interpret_flags(std::fstream &os, const std::string& path_to_destinat
 
         comp.save_text(os);
         this->compressed_size = comp.size;
+
+        if ( bin_flags[14] ) {
+            std::cout << "Appending CRC-32..." << std::endl;
+            if (!aborting_var) {
+                assert( CRC32_before.length() == 10 );
+                os.write( CRC32_before.c_str(), CRC32_before.length() );
+            }
+            progress_counter++;
+            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+
+        }
+
 
         if ( bin_flags[15] ) {
             std::cout << "Appending SHA-1..." << std::endl;
@@ -143,11 +162,6 @@ void file::interpret_flags(std::fstream &os, const std::string& path_to_destinat
         comp.load_text( os, this->compressed_size );
 
 
-
-        if ( bin_flags[14] ) {
-            std::cout << "Bit 14/16384\tis true - " << std::endl;
-            throw FlagReservedException();
-        }
 
         if ( bin_flags[13] ) {
             std::cout << "Bit 13/8192\t\tis true - " << std::endl;
@@ -236,6 +250,25 @@ void file::interpret_flags(std::fstream &os, const std::string& path_to_destinat
         comp.save_text(output);
         output.close();
         std::cout << "Decoding finished." << std::endl;
+
+        if ( bin_flags[14] and validate_integrity ) {
+            std::cout << "Comparing CRC-32..." << std::endl;
+            integrity_validation iv;
+
+            std::string CRC32_before = std::string( 10, ' ');
+            os.read( &CRC32_before[0], 10 );
+
+            std::string CRC32_after = iv.get_CRC32_from_text(comp.text, comp.size, aborting_var);
+            if ( !aborting_var ) {
+                if ( CRC32_before == CRC32_after )
+                    std::cout << "File integrity confirmed.\n" << "before: " << CRC32_before << "\nafter:  " << CRC32_after << std::endl;
+                else
+                    std::cout << "File integrity compromised!!!\n" << "before: " << CRC32_before << "\nafter:  " << CRC32_after << std::endl;
+            }
+            progress_counter++;
+            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+
+        }
 
         if ( bin_flags[15] and validate_integrity ) {
             std::cout << "Comparing SHA-1..." << std::endl;
@@ -328,7 +361,7 @@ void file::parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_pt
 
 }
 
-void file::write_to_archive( std::fstream &archive_file, bool& aborting_var, bool write_siblings ) {
+void file::write_to_archive( std::fstream &archive_file, bool& aborting_var, bool write_siblings, uint16_t* progress_var ) {
     std::cout << "name of this file is: " << this->name << std::endl;
     if (!this->alreadySaved and !aborting_var) {
         this->alreadySaved = true;
@@ -429,7 +462,7 @@ void file::write_to_archive( std::fstream &archive_file, bool& aborting_var, boo
         data_location = backup_end_of_metadata;
 
         // encoding
-        interpret_flags( archive_file, "encoding has it's path in the file object", true, aborting_var );
+        interpret_flags( archive_file, "encoding has it's path in the file object", true, aborting_var, true, progress_var );
 
         std::cout << "compressed size: " << compressed_size << std::endl;
 
@@ -475,17 +508,19 @@ void file::unpack( const std::string& path_to_destination, std::fstream &os, boo
 
 }
 
-std::string file::get_compressed_filesize_str() {
+std::string file::get_compressed_filesize_str(bool scaled) {
     std::string units[5] = {"B","KB","MB","GB","TB"};
 
     float filesize = this->compressed_size;
     uint16_t unit_i = 0;
-    for (uint16_t i=0; i<5; ++i) {
-        if (filesize > 1000) {
-            filesize /= 1000;
-            unit_i++;
+    if (scaled) {
+        for (uint16_t i=0; i<5; ++i) {
+            if (filesize > 1000) {
+                filesize /= 1000;
+                unit_i++;
+            }
+            else break;
         }
-        else break;
     }
     if ( unit_i != 0 ) {
         std::string output = std::to_string(std::lround(filesize*10));
@@ -493,20 +528,36 @@ std::string file::get_compressed_filesize_str() {
 
         return output + ' ' + units[unit_i];
     }
-    else return std::to_string(std::lround(filesize)) + " " + units[unit_i];
+    else    // unit == bytes
+    {
+        if ( filesize < 1000 ) return std::to_string(std::lround(filesize)) + " " + units[unit_i];
+        else {
+            std::string bytes = std::to_string((uint64_t)filesize);
+            std::string output;
+
+            for (uint64_t i=0; i < bytes.length(); ++i)
+            {
+                output += bytes[i];
+                if ((bytes.length()-i-1)%3==0 and i != bytes.length()-1) output +=',';
+            }
+            return output + ' ' + units[unit_i];
+        }
+    }
 }
 
-std::string file::get_uncompressed_filesize_str() {
+std::string file::get_uncompressed_filesize_str(bool scaled) {
     std::string units[5] = {"B","KB","MB","GB","TB"};
 
     float filesize = this->uncompressed_size;
     uint16_t unit_i = 0;
-    for (uint16_t i=0; i<5; ++i) {
-        if (filesize > 1000) {
-            filesize /= 1000;
-            unit_i++;
+    if (scaled) {
+        for (uint16_t i=0; i<5; ++i) {
+            if (filesize > 1000) {
+                filesize /= 1000;
+                unit_i++;
+            }
+            else break;
         }
-        else break;
     }
     if ( unit_i != 0 ) {
         std::string output = std::to_string(std::lround(filesize*10));
@@ -514,7 +565,21 @@ std::string file::get_uncompressed_filesize_str() {
 
         return output + ' ' + units[unit_i];
     }
-    else return std::to_string(std::lround(filesize)) + " " + units[unit_i];
+    else    // unit == bytes
+    {
+        if ( filesize < 1000 ) return std::to_string(std::lround(filesize)) + " " + units[unit_i];
+        else {
+            std::string bytes = std::to_string((uint64_t)filesize);
+            std::string output;
+
+            for (uint64_t i=0; i < bytes.length(); ++i)
+            {
+                output += bytes[i];
+                if ((bytes.length()-i-1)%3==0 and i != bytes.length()-1) output +=',';
+            }
+            return output + ' ' + units[unit_i];
+        }
+    }
 }
 
 
@@ -618,9 +683,9 @@ void folder::append_to_archive( std::fstream& archive_file, bool& aborting_var )
     this->write_to_archive( archive_file, aborting_var );
 }
 
-void file::append_to_archive( std::fstream& archive_file, bool& aborting_var, bool write_siblings ) {
+void file::append_to_archive( std::fstream& archive_file, bool& aborting_var, bool write_siblings, uint16_t* progress_var ) {
     archive_file.seekp(0, std::ios_base::end);
-    this->write_to_archive( archive_file, aborting_var, write_siblings );
+    this->write_to_archive( archive_file, aborting_var, write_siblings, progress_var );
 }
 
 void folder::write_to_archive( std::fstream &archive_file, bool& aborting_var ) {

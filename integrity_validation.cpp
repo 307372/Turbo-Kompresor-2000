@@ -14,7 +14,9 @@
 #include <iomanip>
 #include <map>
 
-integrity_validation::integrity_validation()= default;
+integrity_validation::integrity_validation() {
+    generate_CRC32_lookup_table();
+}
 
 std::string integrity_validation::get_SHA1( const std::string& path_to_file, bool& aborting_var )
 {
@@ -137,4 +139,62 @@ std::string integrity_validation::get_SHA1( const std::string& path_to_file, boo
         return sha1hex;
     }
     return "";
+}
+
+void integrity_validation::generate_CRC32_lookup_table() {
+    //source: https://stackoverflow.com/questions/26049150/calculate-a-32-bit-crc-lookup-table-in-c-c/26051190
+    uint64_t poly = 0xEDB88320; // reversed 0x4C11DB7
+    uint64_t remainder;
+    for (uint16_t b = 0; b < 256; ++b) {
+        remainder = b;
+        for (uint64_t bit=8; bit > 0; --bit) {
+            if (remainder & 1)
+                remainder = (remainder >> 1) xor poly;
+            else
+                remainder >>= 1;
+        }
+        CRC32_lookup_table[b] = remainder;
+    }
+}
+
+std::string integrity_validation::get_CRC32_from_text(uint8_t *text, uint64_t text_size, bool& aborting_var) {
+    // Based on pseudocode from wikipedia:
+    // https://en.wikipedia.org/wiki/Cyclic_redundancy_check#CRC-32_algorithm
+    uint32_t crc32 = UINT32_MAX;
+    for (uint64_t i=0; i < text_size; ++i and !aborting_var) crc32 = (crc32 >> 8) xor CRC32_lookup_table[(crc32 xor (uint32_t)text[i]) & 0xFF];
+
+    if (!aborting_var) {
+        std::stringstream stream;
+        stream << "0x" << std::hex << std::setw(8) << std::setfill('0') << ~crc32;
+        std::string crc32_str = stream.str();
+        std::cout << "CRC-32:\n" << crc32_str << std::endl;
+        return crc32_str;
+    }
+    else return "";
+}
+
+std::string integrity_validation::get_CRC32_from_file( std::string path, bool& aborting_var ) {
+    // Based on pseudocode from wikipedia:
+    // https://en.wikipedia.org/wiki/Cyclic_redundancy_check#CRC-32_algorithm
+
+    std::filesystem::path source(path);
+    std::fstream source_file(path, std::ios::binary | std::ios::in);
+    uint64_t text_size = std::filesystem::file_size(path);
+    auto* text = new uint8_t[text_size];
+
+    source_file.read((char*)text, text_size);   // naive
+
+    uint32_t crc32 = UINT32_MAX;
+    for (uint64_t i=0; i < text_size and !aborting_var; ++i) crc32 = (crc32 >> 8) xor CRC32_lookup_table[(crc32 xor (uint32_t)text[i]) & 0xFF];
+
+    delete[] text;
+
+    if (!aborting_var) {
+        std::stringstream stream;
+        stream << "0x" << std::hex << std::setw(8) << std::setfill('0') << ~crc32;
+        std::string crc32_str = stream.str();
+        std::cout << "CRC-32:\n" << crc32_str << std::endl;
+        return crc32_str;
+    }
+    else return "";
 }

@@ -23,6 +23,8 @@ add_executable(Turbo-Kompresor-2000
 
   mydialog.cpp mydialog.h  mydialog.ui
 
+  settingsdialog.cpp settingsdialog.h settingsdialog.ui
+
   statistical_tools.cpp statistical_tools.h
 
   integrity_validation.cpp integrity_validation.h
