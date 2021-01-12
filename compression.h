@@ -19,14 +19,20 @@
 
 class Compression {
 public:
+    enum
+    {
+        compress, decompress
+    };
     bool* aborting_var;
     uint8_t* text;
     uint32_t size;
+    uint32_t part_id=0;
 
     Compression( bool& aborting_variable );
     ~Compression();
 
-    void load_text( std::fstream &input, uint64_t &text_size );
+    void load_text( std::fstream &input, uint64_t text_size );
+    void load_part( std::fstream &input, uint64_t text_size, uint32_t part_num, uint32_t block_size );
     void save_text( std::fstream &output );
 
     void BWT_make();
@@ -46,6 +52,9 @@ public:
 
     void AC2_make();
     void AC2_reverse();
+
+    void AC2ef_make();
+    void AC2ef_reverse();
 
 };
 

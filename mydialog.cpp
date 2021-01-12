@@ -11,7 +11,6 @@ MyDialog::MyDialog(QWidget *parent) :
     ui->setupUi(this);
     this->setModal(true);
     parent_mw = reinterpret_cast<MainWindow*>(parent);
-    temp_path = std::filesystem::temp_directory_path().append( "tk2k_archive.tmp" );
 
     this->parent_usertype = -1;
     this->twfolder_ptr = nullptr;
@@ -25,7 +24,6 @@ MyDialog::MyDialog(TreeWidgetFolder* twfolder, QStringList file_path_list, QWidg
     ui->setupUi(this);
     this->setModal(true);
     parent_mw = reinterpret_cast<MainWindow*>(parent);
-    temp_path = std::filesystem::temp_directory_path().append( "tk2k_archive.tmp" );
 
     this->parent_usertype = 1001;
     this->twfolder_ptr = twfolder;
@@ -40,7 +38,6 @@ MyDialog::MyDialog(TreeWidgetFile* twfile, QStringList file_path_list, QWidget *
     ui->setupUi(this);
     this->setModal(true);
     parent_mw = reinterpret_cast<MainWindow*>(parent);
-    temp_path = std::filesystem::temp_directory_path().append( "tk2k_archive.tmp" );
 
     this->parent_usertype = 1002;
     this->twfolder_ptr = nullptr;
@@ -58,7 +55,6 @@ MyDialog::MyDialog(std::vector<QTreeWidgetItem*> extraction_targets, QWidget *pa
     ui->setupUi(this);
     this->setModal(true);
     parent_mw = reinterpret_cast<MainWindow*>(parent);
-    temp_path = "decoding shouldn't need this path";
 
     this->parent_usertype = 997;    // should never be used
     this->twfolder_ptr = nullptr;
@@ -130,16 +126,19 @@ uint16_t MyDialog::get_flags() {
     flags[2] = ui->checkBox_RLE->isChecked();
 
     switch (ui->comboBox_entropy_coding->currentIndex()) {
-    case 0:     // Arithmetic coding (naive model)
+    case 0:     // None
+        break;
+
+    case 1:     // Arithmetic coding (naive model)
         flags[3] = true;
         break;
 
-    case 1:     // Arithmetic coding (better model)
+    case 2:     // Arithmetic coding (better model)
         flags[4] = true;
         break;
     }
 
-    switch (ui->comboBox_checksum->currentIndex()) {    // there will be 2nd, faster checksum algorithm
+    switch (ui->comboBox_checksum->currentIndex()) {
     case 0:     // SHA-1
         flags[15] = true;
         break;
@@ -150,7 +149,7 @@ uint16_t MyDialog::get_flags() {
     }
 
 
-    return (uint16_t)flags.to_ulong();       // NOT FINISHED
+    return (uint16_t)flags.to_ulong();
 }
 
 void MyDialog::prepare_GUI_compression() {
@@ -195,7 +194,7 @@ void MyDialog::on_pushButton_abort_clicked()
 void MyDialog::on_pushButton_compress_clicked()
 {
     // before we begin, let's create a temp file, on which we will be working
-    std::filesystem::copy_file(parent_mw->archive_ptr->load_path, temp_path, std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::copy_file(parent_mw->archive_ptr->load_path, parent_mw->temp_path, std::filesystem::copy_options::overwrite_existing);
 
     ui->stackedWidget->setCurrentIndex(0);
 
@@ -217,7 +216,7 @@ void MyDialog::on_pushButton_compress_clicked()
     else assert(false); // should never happen
 
     progress_step_value = 0;
-    th_compression = new thread_compression( list_of_files, &progress_step_value );
+    th_compression = new thread_compression( list_of_files, &progress_step_value, parent_mw->temp_path );
     my_thread = new QThread;
     th_compression->moveToThread(my_thread);
 
@@ -248,10 +247,10 @@ void MyDialog::on_processing_finished(bool successful) {
         if (compression) {
             if (parent_mw->archive_ptr->archive_file.is_open()) parent_mw->archive_ptr->archive_file.close();
             // replacing archive with its updated version
-            bool result = std::filesystem::copy_file(temp_path, parent_mw->archive_ptr->load_path, std::filesystem::copy_options::overwrite_existing);
+            bool result = std::filesystem::copy_file(parent_mw->temp_path, parent_mw->archive_ptr->load_path, std::filesystem::copy_options::overwrite_existing);
             assert( result );   // will fail if anything goes wrong
             // removing temporary file
-            result = std::filesystem::remove(temp_path);
+            result = std::filesystem::remove(parent_mw->temp_path);
             assert( result );
 
             // reopening fstream to archive
@@ -263,7 +262,7 @@ void MyDialog::on_processing_finished(bool successful) {
         if (compression) {
             std::cout << "Processing aborted" << std::endl;
 
-            bool result = std::filesystem::remove(temp_path);
+            bool result = std::filesystem::remove(parent_mw->temp_path);
             assert( result );
 
             std::cout << "Cleanup successful" << std::endl;
@@ -284,7 +283,8 @@ void MyDialog::on_buttonDecompressionStart_clicked()
     bool confirm_integrity = ui->checkBox_decompression_integrity_validation->isChecked();
 
     if (ui->checkBox_decompression_remember_path) {
-        parent_mw->config_ptr->set_extraction_path( std::filesystem::path( ui->lineEdit_decompression_path->text().toStdString() ) );
+        if (parent_mw->config_ptr->get_extraction_path() != std::filesystem::path( ui->lineEdit_decompression_path->text().toStdString() ))
+            parent_mw->config_ptr->set_extraction_path( std::filesystem::path( ui->lineEdit_decompression_path->text().toStdString() ) );
     }
 
     std::filesystem::path target_path = ui->lineEdit_decompression_path->text().toStdString();
@@ -292,7 +292,7 @@ void MyDialog::on_buttonDecompressionStart_clicked()
 
     std::vector<folder*> folders;
     std::vector<file*> files;
-    //bool is_there_any_folder = false;
+
     for (uint32_t i=0; i < extraction_targets.size(); ++i) {
         if ( extraction_targets[i]->type() == 1001 ) {
             // 1001 == TreeWidgetFolder
@@ -315,7 +315,6 @@ void MyDialog::on_buttonDecompressionStart_clicked()
         std::filesystem::create_directories( target_path ); // making sure extraction path actually exists
         for ( auto single_file : files ) {
             single_file->set_path(target_path, false);
-
         }
     }
     else {
@@ -416,9 +415,9 @@ void MyDialog::on_button_decompression_path_dialog_clicked()
 }
 
 
-thread_compression::thread_compression(std::vector<file*> given_file_list, uint16_t* progress_ptr) : QObject(nullptr)
+thread_compression::thread_compression(std::vector<file*> given_file_list, uint16_t* progress_ptr, std::filesystem::path tmp_path) : QObject(nullptr)
 {
-    temp_path = std::filesystem::temp_directory_path().append( "tk2k_archive.tmp" );
+    temp_path = tmp_path;
     this->file_list = given_file_list;
     // this->stream = given_stream;
     this->aborting_variable = false;

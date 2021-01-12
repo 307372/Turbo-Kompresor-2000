@@ -18,39 +18,19 @@ integrity_validation::integrity_validation() {
     generate_CRC32_lookup_table();
 }
 
-std::string integrity_validation::get_SHA1( const std::string& path_to_file, bool& aborting_var )
-{
+std::string integrity_validation::get_SHA1_from_file(const std::string &path_to_file, bool &aborting_var) {
     // implemented using pseudocode from: https://en.wikipedia.org/wiki/SHA-1#SHA-1_pseudocode
 
     if (!aborting_var) {
-        uint64_t file_size = std::filesystem::file_size( path_to_file );
+        uint32_t h0 = 0x67452301;
+        uint32_t h1 = 0xEFCDAB89;
+        uint32_t h2 = 0x98BADCFE;
+        uint32_t h3 = 0x10325476;
+        uint32_t h4 = 0xC3D2E1F0;
 
-
-        uint32_t h0 = 1732584193;
-        uint32_t h1 = 4023233417;
-        uint32_t h2 = 2562383102;
-        uint32_t h3 = 271733878;
-        uint32_t h4 = 3285377520;
-
-        std::vector<uint8_t> message;
-        message.reserve(file_size);
-
-        std::ifstream target_file;
-        target_file.open( path_to_file );
+        std::ifstream target_file( path_to_file );
         assert( target_file.is_open() );
 
-        uint8_t ch;
-        while (target_file >> std::noskipws >> ch) {
-            message.push_back(ch);
-        }
-        message.push_back(0x80);
-
-        while (message.size() % 64 != 56)
-            message.push_back(0);
-
-        for (int i = 7; i >= 0; i--) {
-            message.push_back((file_size*8 >> i * 8));
-        }
 
         uint32_t a = 0;
         uint32_t b = 0;
@@ -61,20 +41,182 @@ std::string integrity_validation::get_SHA1( const std::string& path_to_file, boo
         uint32_t f = 0;
         uint32_t k = 0;
 
-        std::vector<uint32_t> chunk;
+        uint8_t buffer[64];
+        uint8_t leftover_buffer[64];
+        uint32_t chunk[80];
+        for (uint32_t i=0; i < 80; ++i) chunk[i] = 0;
+
+        uint64_t byte_counter = 0;
+
+        bool leftover = false;
+
+        while ( target_file.good() or leftover )
+        {
+            if (!leftover) {
+                target_file.read((char *) &buffer, sizeof(buffer));
+                byte_counter += target_file.gcount();
+
+                if (target_file.gcount() < 64) {
+                    uint64_t read_counter = target_file.gcount();
+                    buffer[read_counter] = 0x80;
+                    read_counter++;
+                    for (uint32_t i = read_counter; i < 64; ++i) buffer[i] = 0;
+
+                    if (64 - read_counter < 8) {
+                        leftover = true;
+                        for (uint32_t i = 0; i < 64; ++i) leftover_buffer[i] = 0;
+                        for (int i = 0; i<8; ++i) leftover_buffer[56 + 7-i] = (byte_counter * 8 >> i * 8) & 0xFF;
+                    } else for (int i = 0; i<8 ; ++i) buffer[56 + 7-i] = (byte_counter * 8 >> i * 8) & 0xFF;
+                }
+            }
+            else {
+                leftover = false;
+                for (uint32_t i=0; i < 64; ++i) buffer[i] = leftover_buffer[i];
+            }
+
+            for (uint8_t i = 0; i < 16; i++) // making 16 32-bit words from 64 8-bit words
+            {
+                uint64_t word = 0;
+                for (uint8_t j = 0; j < 4; j++) // making single 32-bit word
+                {
+                    word = (word << 8);
+                    word += buffer[ i*4 + j ];
+                }
+                chunk[i] = word;
+            }
+            for (uint8_t id=16; id < 80; id++)
+            {
+                chunk[id] =  std::rotl(chunk[id-3] ^ chunk[id-8] ^ chunk[id-14] ^ chunk[id-16], 1);
+            }
+
+
+            a = h0;
+            b = h1;
+            c = h2;
+            d = h3;
+            e = h4;
+
+
+            uint32_t temp = 0;
+            for ( uint8_t i = 0; i < 80; i++)
+            {
+                if ( (0 <= i) and (i <= 19) )
+                {
+                    f = ( b & c ) | ((~b) & d);
+                    k = 0x5A827999;
+                }
+                else if ((20 <= i) and (i <= 39))
+                {
+                    f = b ^ c ^ d;
+                    k = 0x6ED9EBA1;
+                }
+                else if ((40 <= i) and (i <= 59)) {
+                    f = (b & c) | (b & d) | (c & d);
+                    k = 0x8F1BBCDC;
+                }
+                else if ((60 <= i) and (i <= 79)) {
+                    f = b ^ c ^ d;
+                    k = 0xCA62C1D6;
+                }
+                temp = std::rotl(a, 5) + f + e + k + chunk[i];
+                e = d;
+                d = c;
+                c = std::rotl(b, 30);
+                b = a;
+                a = temp;
+
+            }
+            h0 += a;
+            h1 += b;
+            h2 += c;
+            h3 += d;
+            h4 += e;
+        }
+        target_file.close();
+        if (aborting_var) return "";
+
+        std::stringstream stream;
+        stream << std::hex << std::setw(8) << std::setfill('0') << h0 <<std::setw(8) << std::setfill('0') << h1 << std::setw(8) << std::setfill('0') << h2 << std::setw(8) << std::setfill('0') << h3 << std::setw(8) << std::setfill('0') << h4;
+        std::string sha1hex = stream.str();
+        this->SHA1 = sha1hex;
+        //std::cout << sha1hex << std::endl;
+        return sha1hex;
+    }
+    return "";
+}
+
+std::string integrity_validation::get_SHA1_from_stream(std::fstream &target_file, uint64_t file_size, bool &aborting_var) {
+    // implemented using pseudocode from: https://en.wikipedia.org/wiki/SHA-1#SHA-1_pseudocode
+
+    if (!aborting_var) {
+
+        uint64_t backup_pos = target_file.tellg();
+
+        target_file.seekg(0);
+
+        uint32_t h0 = 0x67452301;
+        uint32_t h1 = 0xEFCDAB89;
+        uint32_t h2 = 0x98BADCFE;
+        uint32_t h3 = 0x10325476;
+        uint32_t h4 = 0xC3D2E1F0;
+
+        assert( target_file.is_open() );
+
+
+        uint32_t a = 0;
+        uint32_t b = 0;
+        uint32_t c = 0;
+        uint32_t d = 0;
+        uint32_t e = 0;
+
+        uint32_t f = 0;
+        uint32_t k = 0;
+
+        uint8_t buffer[64];
+
+        std::vector<uint32_t> chunk(80, 0);
         chunk.reserve(80);
 
-        for (uint64_t chunk_number = 0; chunk_number < message.size()/64 and !aborting_var; chunk_number++)  //dividing into 512 bit chunks
+        uint64_t byte_counter = 0;
+
+        bool leftover = false;
+        uint8_t leftover_buffer[64];
+
+        while ( target_file.good() or leftover )
         {
+            if (!leftover) {
+                target_file.read((char *) &buffer, sizeof(buffer));
+                byte_counter += target_file.gcount();
+
+                if (target_file.gcount() < 64) {
+                    uint64_t read_counter = target_file.gcount();
+                    buffer[read_counter] = 0x80;
+                    read_counter++;
+                    for (uint32_t i = read_counter; i < 64; ++i) buffer[i] = 0;
+
+                    if (64 - read_counter < 8) {
+                        leftover = true;
+                        for (uint32_t i = 0; i < 64; ++i) leftover_buffer[i] = 0;
+                        for (int i = 0; i<8; ++i) leftover_buffer[56 + 7-i] = (byte_counter * 8 >> i * 8) & 0xFF;
+                    } else for (int i = 0; i<8 ; ++i) buffer[56 + 7-i] = (byte_counter * 8 >> i * 8) & 0xFF;
+                }
+            }
+            else {
+                leftover = false;
+                for (uint32_t i=0; i < 64; ++i) buffer[i] = leftover_buffer[i];
+            }
+
+            chunk = std::vector<uint32_t>();
+            chunk.reserve(80);
+
             for (uint8_t i = 0; i < 16; i++) // making 16 32-bit words from 64 8-bit words
             {
                 chunk.push_back(0);
                 uint64_t word = 0;
                 for (uint8_t j = 0; j < 4; j++) // making single 32-bit word
                 {
-
                     word = (word << 8);
-                    word += message[ chunk_number*64 + i*4 + j ];
+                    word += buffer[ i*4 + j ];
                 }
                 chunk[i] = word;
             }
@@ -129,6 +271,8 @@ std::string integrity_validation::get_SHA1( const std::string& path_to_file, boo
             h4 += e;
         }
 
+        target_file.seekg(backup_pos);
+
         if (aborting_var) return "";
 
         std::stringstream stream;
@@ -140,6 +284,7 @@ std::string integrity_validation::get_SHA1( const std::string& path_to_file, boo
     }
     return "";
 }
+
 
 void integrity_validation::generate_CRC32_lookup_table() {
     //source: https://stackoverflow.com/questions/26049150/calculate-a-32-bit-crc-lookup-table-in-c-c/26051190
@@ -167,7 +312,7 @@ std::string integrity_validation::get_CRC32_from_text(uint8_t *text, uint64_t te
         std::stringstream stream;
         stream << "0x" << std::hex << std::setw(8) << std::setfill('0') << ~crc32;
         std::string crc32_str = stream.str();
-        std::cout << "CRC-32:\n" << crc32_str << std::endl;
+        // std::cout << "CRC-32:\n" << crc32_str << std::endl;
         return crc32_str;
     }
     else return "";
@@ -177,23 +322,59 @@ std::string integrity_validation::get_CRC32_from_file( std::string path, bool& a
     // Based on pseudocode from wikipedia:
     // https://en.wikipedia.org/wiki/Cyclic_redundancy_check#CRC-32_algorithm
 
-    std::filesystem::path source(path);
-    std::fstream source_file(path, std::ios::binary | std::ios::in);
-    uint64_t text_size = std::filesystem::file_size(path);
-    auto* text = new uint8_t[text_size];
+    std::fstream source(path, std::ios::binary | std::ios::in);
+    uint8_t buffer[8*1024];
 
-    source_file.read((char*)text, text_size);   // naive
 
     uint32_t crc32 = UINT32_MAX;
-    for (uint64_t i=0; i < text_size and !aborting_var; ++i) crc32 = (crc32 >> 8) xor CRC32_lookup_table[(crc32 xor (uint32_t)text[i]) & 0xFF];
+    while (source.good())
+    {
+        source.read((char*)&buffer, sizeof(buffer));
 
-    delete[] text;
+        for (uint64_t i=0; i < source.gcount(); ++i)
+        {
+            crc32 = (crc32 >> 8) xor CRC32_lookup_table[(crc32 xor (uint32_t)buffer[i]) & 0xFF];
+        }
+    }
 
     if (!aborting_var) {
         std::stringstream stream;
         stream << "0x" << std::hex << std::setw(8) << std::setfill('0') << ~crc32;
         std::string crc32_str = stream.str();
-        std::cout << "CRC-32:\n" << crc32_str << std::endl;
+        // std::cout << "CRC-32:\n" << crc32_str << std::endl;
+        return crc32_str;
+    }
+    else return "";
+}
+
+std::string integrity_validation::get_CRC32_from_stream(std::fstream &source, bool &aborting_var) {
+    // Based on pseudocode from wikipedia:
+    // https://en.wikipedia.org/wiki/Cyclic_redundancy_check#CRC-32_algorithm
+
+    assert( source.is_open() );
+    uint64_t backup_pos = source.tellg();
+
+    uint8_t buffer[8*1024];
+
+    source.seekg(0);
+
+    uint32_t crc32 = UINT32_MAX;
+    while (source.good())
+    {
+        source.read((char*)&buffer, sizeof(buffer));
+
+        for (uint64_t i=0; i < source.gcount(); ++i)
+        {
+            crc32 = (crc32 >> 8) xor CRC32_lookup_table[(crc32 xor (uint32_t)buffer[i]) & 0xFF];
+        }
+    }
+
+
+    source.seekg(backup_pos);
+    if (!aborting_var) {
+        std::stringstream stream;
+        stream << "0x" << std::hex << std::setw(8) << std::setfill('0') << ~crc32;
+        std::string crc32_str = stream.str();
         return crc32_str;
     }
     else return "";

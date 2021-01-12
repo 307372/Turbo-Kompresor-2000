@@ -82,6 +82,13 @@
        </widget>
       </item>
       <item>
+       <widget class="QPushButton" name="buttonRemoveSelected">
+        <property name="text">
+         <string>Remove selected</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QPushButton" name="buttonExtractAll">
         <property name="text">
          <string>Extract all files</string>

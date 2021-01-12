@@ -16,6 +16,8 @@
 #include "mydialog.h"
 #include "config.h"
 
+#include <QCommonStyle>
+
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
@@ -36,9 +38,15 @@ public:
     void write_folder_to_current_archive( folder* folder_model, bool& aborting_var );
 
     archive* archive_ptr = nullptr;
-    std::string current_archive_path;
+    std::string current_archive_path = "";
     Config* config_ptr = nullptr;
-    //Ui::MainWindow *ui;
+
+    QString style_dark = "";
+    QString style_light = "";
+    QString style_default = "";
+
+    std::filesystem::path temp_path = std::filesystem::temp_directory_path().append( "tk2k_archive.tmp" );
+
 
 
 private slots:
@@ -55,6 +63,8 @@ private slots:
     void on_buttonAddNewFolder_clicked();
 
     void openSettingsDialog();
+
+    void on_buttonRemoveSelected_clicked();
 
 private:
     Ui::MainWindow *ui;
@@ -94,37 +104,6 @@ public:
 
 };
 
-
-class TreeWidgetFilesizeItem : public QTreeWidgetItem {
-
-public:
-    TreeWidgetFilesizeItem(QTreeWidget* parent):QTreeWidgetItem(parent){}
-private:
-    bool operator<(const QTreeWidgetItem &other)const {
-        //1001 - TreeWidgetFolder
-        //1002 - TreeWidgetFile
-        std::cout << "moje sortowanie dziala!" << std::endl;
-        int column = treeWidget()->sortColumn();
-
-        if (column == 3) {
-
-            if (this->type() == other.type() ) {
-                if ( this->type() == 1001 ) { // both this and other are TreeWidgetFolders
-                    if ( this->text(column).compare(other.text(column)) ) return true;
-                    else return false;
-                }
-                else {  // both this and other are TreeWidgetFiles
-                    //if ( static_cast<TreeWidgetFile*>(this). )
-                }
-            }
-            else if (this->type() < other.type()) return true;
-            else return false;
-            //element->type();
-
-            //return text(column).toLower() < other.text(column).toLower();
-        }
-    }
-};
 
 
 

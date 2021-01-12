@@ -17,7 +17,7 @@
    <item>
     <widget class="QStackedWidget" name="stackedWidget">
      <property name="currentIndex">
-      <number>1</number>
+      <number>0</number>
      </property>
      <widget class="QWidget" name="page_compression_progress">
       <layout class="QVBoxLayout" name="verticalLayout">
@@ -25,6 +25,9 @@
         <widget class="QFrame" name="_frame">
          <property name="frameShape">
           <enum>QFrame::StyledPanel</enum>
+         </property>
+         <property name="frameShadow">
+          <enum>QFrame::Raised</enum>
          </property>
          <layout class="QGridLayout" name="gridLayout">
           <item row="0" column="0">
@@ -107,11 +110,14 @@
          <property name="frameShape">
           <enum>QFrame::StyledPanel</enum>
          </property>
+         <property name="frameShadow">
+          <enum>QFrame::Raised</enum>
+         </property>
          <layout class="QVBoxLayout" name="verticalLayout_4">
           <item>
            <widget class="QLabel" name="_label_progress1label">
             <property name="text">
-             <string>Total Progress</string>
+             <string>Total progress</string>
             </property>
            </widget>
           </item>
@@ -125,7 +131,7 @@
           <item>
            <widget class="QLabel" name="_label_progress2label">
             <property name="text">
-             <string>Currently processed file's progress</string>
+             <string>File progress</string>
             </property>
            </widget>
           </item>
@@ -219,8 +225,13 @@
              <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Entropy coding is the step, which usually does most of compressing among the algorithms I've implemented.&lt;br/&gt;&lt;/p&gt;&lt;p&gt;Better model gives better compression, but also has 256 KB overhead regardless of data type at the moment, so it's absurdly counterproductive for small files.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
             </property>
             <property name="currentIndex">
-             <number>1</number>
+             <number>0</number>
             </property>
+            <item>
+             <property name="text">
+              <string>None</string>
+             </property>
+            </item>
             <item>
              <property name="text">
               <string>Arithmetic coding (naive model)</string>

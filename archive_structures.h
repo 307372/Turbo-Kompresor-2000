@@ -10,6 +10,7 @@
 #include <bitset>
 #include <utility>
 #include <cmath>
+#include <thread>
 
 #include "compression.h"
 #include "project_exceptions.h"
@@ -53,6 +54,8 @@ struct folder
 
     void unpack( const std::filesystem::path& target_path, std::fstream &os, bool& aborting_var, bool unpack_all ) const;
 
+    void copy_to_another_file( std::fstream& source, std::fstream& destination, uint64_t parent_location, uint64_t previous_sibling_location );
+
     void get_ptrs( std::vector<folder*>& folders, std::vector<file*>& files );
 
     void set_path( std::filesystem::path extraction_path, bool set_all_paths );
@@ -86,7 +89,8 @@ struct file
 
     static const bool dont_abort = false;
 
-    void interpret_flags(std::fstream &os, const std::string& path_to_destination, bool decode, bool& aborting_var, bool validate_integrity = true, uint16_t* progress_ptr = nullptr );
+    void interpret_flags(std::fstream &archive_stream, const std::string& path_to_destination, bool decode, bool& aborting_var,
+                         bool validate_integrity = true, uint16_t* progress_ptr = nullptr );
 
     void recursive_print(std::ostream &os) const;
 
@@ -103,6 +107,8 @@ struct file
     std::string get_compressed_filesize_str(bool scaled);
 
     std::string get_uncompressed_filesize_str(bool scaled);
+
+    void copy_to_another_file( std::fstream& source, std::fstream& destination, uint64_t parent_location, uint64_t previous_sibling_location );
 
     void get_ptrs( std::vector<file*>& files, bool get_siblings_too = false );
 

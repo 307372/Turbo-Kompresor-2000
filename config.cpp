@@ -28,15 +28,16 @@ void Config::parse()
         while (!config_file.eof()) {
             std::getline(config_file, buffer);
 
-            // std::cout << buffer;
-
             if (buffer[0] == '#' and buffer[1] == '#') continue;    // my comments start with ##
             if (buffer.length() == 0) continue;                     // if line is empty, skip it
+
             switch( property_counter )
             {
             case 0: extraction_path = buffer; break;
 
             case 1: filesize_scaling = (buffer[0] == '1'); break;
+
+            case 2: dark_mode = (buffer[0] == '1'); break;
 
             default: assert(false);
             }
@@ -69,7 +70,10 @@ void Config::save()
                 << extraction_path.string() << '\n'
                 << "## Are file sizes scaled?\n"
                 << "## 0 - no, 1 - yes\n"
-                << (int)filesize_scaling << '\n';
+                << (int)filesize_scaling << '\n'
+                << "## Is dark mode on?\n"
+                << "## 0 - no, 1 - yes\n"
+                << (int)dark_mode << '\n';
 
     if (config_file.is_open()) config_file.close();
 }
@@ -88,7 +92,10 @@ void Config::save_default()
                 << std::filesystem::current_path().string() << '\n'
                 << "## Are file sizes scaled?\n"
                 << "## 0 - no, 1 - yes\n"
-                << 1 << '\n';
+                << 1 << '\n'
+                << "## Is dark mode on?\n"
+                << "## 0 - no, 1 - yes\n"
+                << 0 << '\n';
 
 
 

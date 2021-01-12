@@ -80,7 +80,6 @@ private:
     decompression_object* th_decompression = nullptr;
 
     int16_t parent_usertype = -1;
-    std::filesystem::path temp_path;
     QStringList paths_to_files;
     std::chrono::time_point<std::chrono::high_resolution_clock> time_start;
     bool compression;       // true = compression, false = decompression
@@ -105,7 +104,7 @@ class thread_compression : public QObject
 {
     Q_OBJECT
 public:
-    explicit thread_compression( std::vector<file*> file_list, uint16_t* progress_ptr );
+    explicit thread_compression( std::vector<file*> file_list, uint16_t* progress_ptr, std::filesystem::path tmp_path );
     ~thread_compression();
     void start();
 

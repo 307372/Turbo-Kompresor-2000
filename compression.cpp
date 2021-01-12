@@ -14,16 +14,41 @@ Compression::~Compression() {
     delete[] text;
 }
 
-void Compression::load_text( std::fstream &input, uint64_t &text_size ) {
+void Compression::load_text( std::fstream &input, uint64_t text_size ) {
     if (!*aborting_var) {
         delete[] this->text;
         this->size = text_size;
-        std::cout << "text_size: " << this->size << std::endl;
         this->text = new uint8_t [this->size];
         input.read( (char*)this->text, this->size );
     }
     else std::cout << "Not loading, already aborted" << std::endl;
 }
+
+
+
+void Compression::load_part(std::fstream &input, uint64_t text_size, uint32_t part_num, uint32_t block_size) {
+    if (!*aborting_var) {
+
+        delete[] this->text;
+        assert( block_size * part_num < text_size ); // part_size * part_num == starting position
+        // potentially broken af
+        if (block_size * (part_num+1) < text_size ) this->size = block_size;
+        else this->size = text_size - (block_size * part_num);
+
+        assert( this->size <= block_size );
+
+        // std::cout << "this block's size: " << this->size << std::endl;
+
+        this->text = new uint8_t [this->size];
+
+        assert( input.is_open() );
+        input.seekg(block_size * part_num);
+        input.read( (char*)this->text, this->size );
+    }
+    else std::cout << "Not loading, already aborted" << std::endl;
+}
+
+
 
 void Compression::save_text( std::fstream &output ) {
     if (!*aborting_var) output.write((char*)(this->text), this->size);
@@ -658,9 +683,9 @@ void Compression::AC_make() {
         }
 
         bitout.flush();
-        std::cout << "bitout flushed" << std::endl;
-        bitout.flush();
-        std::cout << "bitout flushed again" << std::endl;
+        // std::cout << "bitout flushed" << std::endl;
+        // bitout.flush();
+        // std::cout << "bitout flushed again" << std::endl;
 
         if (*aborting_var) return;
 
@@ -1266,6 +1291,460 @@ void Compression::AC2_reverse() {
 
 
 
+void Compression::AC2ef_make() {
+    //  arithmetic coding - file size version
+    //  based on algorithm from youtube (Information Theory playlist by mathematicalmonk, IC 5)
+    //  guaranteed to work for all blocks of under 16 mb
+    //  smaller dictionary
+
+    if (!*aborting_var) {
+        uint16_t precision = 31;
+        uint64_t whole = UINT_MAX;
+        long double wholed = UINT_MAX;
+        uint64_t half = roundl(wholed / 2.0);
+        uint64_t quarter = roundl(wholed / 4.0);
+
+
+        statistical_tools st;
+        st.count_symbols_from_text_1back(this->text, this->size);
+        //st.model_from_text_1back(this->text, this->size);
+
+        if (*aborting_var) return;
+
+        uint16_t r_size = 256;
+        std::string output(4 + 4 + 4 + 4 + 32, 0);
+        // metadata byte layout:
+        // 0-3 => block ID
+        // 4-7 => size of this block after compression
+        // 8-11 => orignal size (bytes)
+        // 12-15 => compressed size (bits)
+        // 16-47 => alphabet
+
+
+
+        for (uint16_t i = 0; i < 4; i++) {   // filling bytes 8-11 with original size of the block
+            output[8 + i] = (uint8_t) (this->size >> (i * 8u)) & 0xFFu;
+        }
+
+        std::vector<uint8_t> alphabet;
+        for (uint16_t byte=0; byte < 32; ++byte)    // filling bytes 16-47 with alphabet
+        {
+            uint8_t byte_value=0;
+            for (uint16_t bit=0; bit < 8; ++bit)
+            {
+                if ( st.r[byte*8 + bit] != 0 )
+                {
+                    byte_value += 1u << (7-bit);
+                    alphabet.emplace_back(byte*8 + bit);
+                }
+            }
+            output[16+byte] = byte_value;
+        }
+
+        for (uint16_t byte_ind=0; byte_ind < 3; ++byte_ind) {   // the character count can't exceed 24 bits (because max block size is 16 MiB)
+            std::vector<uint8_t> temp_output;
+            for (auto previous_ch : alphabet) {
+
+
+                std::vector<uint8_t> current_alphabet;
+                for (auto ch : alphabet){
+                    uint8_t remainder = (st.rr[previous_ch][ch] >> (byte_ind*8u)) % 256;
+                    if ( remainder != 0 )
+                    {
+                        current_alphabet.push_back(remainder);
+                        // not finished!
+                    }
+                }
+
+                for (auto current_ch : current_alphabet) {
+                    // not finished!
+                }
+            }
+        }
+
+
+
+
+        std::vector<std::vector<uint64_t>> c;
+        std::vector<std::vector<uint64_t>> d;
+
+        for (uint16_t r = 0; r < r_size; r++) {
+            c.emplace_back(257);
+            d.emplace_back(257);
+            c[r][0] = 0;
+
+            for (uint16_t i = 0; i < r_size; i++) { // saving probabilites to file, 256*256*4 bytes, unfortunately
+                if (st.rr[r][i] != 0) {
+                    output[8 + r * 256 * 4 + 4 * i] = st.rr[r][i] & 0xFFu;
+                    output[8 + r * 256 * 4 + 4 * i + 1] = (st.rr[r][i] >> 8u) & 0xFFu;
+                    output[8 + r * 256 * 4 + 4 * i + 2] = (st.rr[r][i] >> 16u) & 0xFFu;
+                    output[8 + r * 256 * 4 + 4 * i + 3] = (st.rr[r][i] >> 24u) & 0xFFu;
+                }
+                // generating partial sums c and d
+                c[r][i + 1] = (c[r][i] + st.rr[r][i]);
+                d[r][i] = c[r][i + 1];
+            }
+            d[r][255] = whole;
+        }
+
+
+        //check if sum of probabilities represented as UINT_MAX is equal to whole
+        if (true) {
+            for (auto &r : st.rr) {
+                uint64_t sum = 0;
+                for (auto &n : r) sum += n;
+                assert(sum == whole or sum == 0);
+            }
+        }
+
+        //Actual encoding
+        uint64_t a = 0;
+        uint64_t b = whole;
+        uint64_t w;
+        uint32_t s = 0;
+
+        if (*aborting_var) return;
+
+        Text_write_bitbuffer bitout(output);
+
+        output += text[0];  //  saving first char, for decoding purposes
+
+        for (uint32_t i = 1; i < this->size and !*aborting_var; ++i) {
+
+            w = b - a;
+
+            b = a + roundl(((uint64_t)(d[this->text[i-1]][this->text[i]]*w))/wholed);
+            a = a + roundl(((uint64_t)(c[this->text[i-1]][this->text[i]]*w))/wholed);
+            //b = a + roundl(((long double)d[this->text[i - 1]][this->text[i]] * w) / wholed); //potential rounding errors
+            //a = a + roundl(((long double)c[this->text[i - 1]][this->text[i]] * w) / wholed);
+
+            assert(a < whole and b <= whole);
+            assert(a < b);
+            while (b < half or a >= half) {
+                if (b < half) {
+                    //wynik += "0";
+                    bitout.add_bit_0();
+                    for (uint32_t j = 0; j < s; j++) {
+                        //wynik += "1";
+                        bitout.add_bit_1();
+                    }
+                    s = 0;
+                    a *= 2;
+                    b *= 2;
+                } else if (a >= half) {
+
+                    //wynik += "1";
+                    bitout.add_bit_1();
+                    for (uint32_t j = 0; j < s; j++) {
+                        //wynik += "0";
+                        bitout.add_bit_0();
+                    }
+                    s = 0;
+                    a = 2 * (a - half);
+                    b = 2 * (b - half);
+                } else std::cout << "a = " << a << ", half = " << half << ", b = " << b << std::endl;
+            }
+            while (a >= quarter and b < 3 * quarter) {
+                s++;
+                a = 2 * (a - quarter);
+                b = 2 * (b - quarter);
+            }
+        }
+
+        s++;
+        if (a <= quarter) {
+            //wynik += "0";
+            bitout.add_bit_0();
+            for (uint32_t j = 0; j < s; j++) {
+                //wynik += "1";
+                bitout.add_bit_1();
+            }
+        } else {
+            //wynik += "1";
+            bitout.add_bit_1();
+            for (uint32_t j = 0; j < s; j++) {
+                //wynik += "0";
+                bitout.add_bit_0();
+            }
+        }
+
+        bitout.flush();
+
+
+
+        if (*aborting_var) return;
+
+        for (uint8_t i = 0; i < 4; i++) { // filling first 4 bits of output with compressed data size in   B I T S
+            output[i] = (uint8_t) ((uint32_t) bitout.get_output_size() >> (i * 8u)) & 0xFFu;
+        }
+
+        this->size = output.length();
+
+        delete[] this->text;
+        this->text = new uint8_t[this->size];
+
+        for (uint32_t i = 0; i < this->size; ++i) this->text[i] = output[i];
+
+        // test printing
+        if (false) {
+            uint32_t pc0 = 0;//print counter
+            uint32_t pc1 = 0;//print counter
+
+            std::cout << "\namount of bits written:\n";
+            for (; pc1 < 4; pc1++) std::cout << (uint16_t) (uint8_t) output[pc1];
+
+            std::cout << "\namount of chars of text:\n";
+            for (pc0 = pc1; pc1 < pc0 + 4; pc1++) std::cout << (uint16_t) (uint8_t) output[pc1];
+
+            pc0 = pc1;
+            for (uint16_t r = 0; r < 256; ++r) {
+                std::cout << "tab for\t" << r << std::endl;
+                for (uint16_t i = 0; i < 256; ++i) {
+                    uint32_t index = 8 + (r * 256 * 4) + (i * 4);
+
+                    uint32_t sum = (uint16_t) (uint8_t) output[index] + (uint16_t) (uint8_t) output[index + 1] +
+                                   (uint16_t) (uint8_t) output[index + 2] + (uint16_t) (uint8_t) output[index + 3];
+                    if (sum != 0)
+                        std::cout << i << "\t: " << (uint16_t) (uint8_t) output[index] << ' '
+                                  << (uint16_t) (uint8_t) output[index + 1] << ' ' << (uint16_t) (uint8_t) output[index + 2]
+                                  << ' ' << (uint16_t) (uint8_t) output[index + 3] << '\n';
+                    pc1 += 4;
+
+
+                }
+            }
+        }
+    }
+}
+
+void Compression::AC2ef_reverse() {
+
+    if (!*aborting_var) {
+
+        auto t0 = std::chrono::high_resolution_clock::now();
+        uint16_t precision = 31;
+        uint64_t whole = UINT_MAX;
+        long double wholed = UINT_MAX;
+        uint64_t half = roundl(wholed/2.0);
+        uint64_t quarter = roundl(wholed/4.0);
+
+        uint16_t r_size = 256;
+
+
+
+        std::vector<std::vector<uint64_t>> c(256);
+        std::vector<std::vector<uint64_t>> d(256);
+        std::vector<std::string> alphabet(256);
+
+        uint32_t compressed_file_size = ((uint32_t)this->text[0]) | ((uint32_t)this->text[1]<<8u) | ((uint32_t)this->text[2]<<16u) | ((uint32_t)this->text[3]<<24u);
+        uint32_t uncompressed_file_size = ((uint32_t)this->text[4]) | ((uint32_t)this->text[5]<<8u) | ((uint32_t)this->text[6]<<16u) | ((uint32_t)this->text[7]<<24u);
+
+        for (uint16_t r = 0; r < r_size; ++r) {
+            std::vector<uint64_t> temp_c(1,0);
+            std::vector<uint64_t> temp_d;
+
+            uint64_t sum = 0;
+            uint8_t r_buffer[256 * 4];
+            for (uint16_t i = 0; i < r_size * 4; ++i) r_buffer[i] = this->text[8 + r*r_size*4 + i];  // r array starts after 8 bytes
+            for (uint16_t i = 0; i < r_size; i++) {
+                uint64_t p1 = r_buffer[i * 4];
+                uint64_t p2 = (r_buffer[i * 4 + 1] << 8u);
+                uint64_t p3 = (r_buffer[i * 4 + 2] << 16u);
+                uint64_t p4 = ((uint64_t) r_buffer[i * 4 + 3] << 24u);
+                assert(p1 < whole and p2 < whole and p3 < whole and p4 < whole);
+                uint64_t rn = p1 | p2 | p3 | p4;
+
+                if (rn != 0) {
+                    alphabet[r] += char(i);
+                    sum += rn;
+                    temp_d.push_back(sum);
+                    if ( i!=255 ) {
+                        temp_c.push_back(sum);
+                    }
+                }
+            }
+            if (!temp_d.empty()) {
+                c[r] = temp_c;
+                //temp_d.emplace_back(whole);
+                d[r] = temp_d;
+            }
+        }
+
+        if (*aborting_var) return;
+
+        auto t1 = std::chrono::high_resolution_clock::now();
+
+
+        Text_read_bitbuffer in_bit(this->text, compressed_file_size, 8+256*256*4+1);
+
+        uint64_t a = 0;
+        uint64_t b = whole;
+        uint64_t z = 0;
+        long double w = 0;
+
+
+        // actual decoding
+
+        uint64_t i = 0;
+        while ( i<=precision and i < compressed_file_size )
+        {
+            if (in_bit.getbit()) //if bit's value == 1
+            {
+                z += (1ull<<(precision-i));
+                //std::cout << '1';
+            }
+            //else std::cout << '0';
+            i++;
+        }
+        std::cout << std::endl;
+
+        //if ( i == compressed_file_size ) z >>= precision-i+1;
+
+
+
+        std::string output;
+
+
+        uint64_t a0 = 0;
+        uint64_t b0 = 0;
+
+
+        uint8_t previous_char = this->text[8+r_size*r_size*4];    // first char of decoded text is normal ascii char
+        output += previous_char;
+        uint64_t output_size_counter = 1;
+
+        // Timing
+        //std::vector<std::chrono::microseconds> durations_for;
+        //std::vector<std::chrono::microseconds> durations_while;
+        //auto t2 = std::chrono::high_resolution_clock::now();
+
+        while (output_size_counter != uncompressed_file_size and !*aborting_var)
+        {
+            //t0 = std::chrono::high_resolution_clock::now();
+
+            //if (output_size_counter == uncompressed_file_size-1) {
+            //    std::cout << "rzeczy sie dzieja" << std::endl;
+            //}
+
+            assert( z <= b );
+
+            w = b - a;
+            assert( z>=a and w<=whole );
+            uint64_t searched = floorl((long double)(z - a) * wholed / (long double)w);
+
+            int16_t j = std::upper_bound(d[previous_char].begin(), d[previous_char].end(), searched ) - d[previous_char].begin();
+            //if (j == -1) j=0;
+            //b0 = a + roundl(((long double)d[previous_char][j] * (long double)w) / wholed);
+            //a0 = a + roundl(((long double)c[previous_char][j] * (long double)w) / wholed);
+            b0 = a + roundl(d[previous_char][j] * w / wholed); //potential rounding errors
+            if (b0 <= z) {
+                // std::cout << "powiekszono\n";
+                j++;
+                //b0 = a + ceill(d[previous_char][j] * w / wholed);
+                //a0 = a + floorl(c[previous_char][j] * w / wholed);
+                b0 = a + roundl(d[previous_char][j] * w / wholed); //potential rounding errors
+                //a0 = a + roundl((long double)c[previous_char][j] * w / wholed);
+            }
+            a0 = a + roundl(c[previous_char][j] * w / wholed);
+            //if (b0 > whole) {
+            //    b0 = whole;
+            //}
+
+            /*
+            if (a0 > z) {
+                //std::cout << "pomniejszono\n";
+                j--;
+                //b0 = a + ceill(d[previous_char][j] * w / wholed);
+                //a0 = a + floorl(c[previous_char][j] * w / wholed);
+                b0 = a + roundl((long double)d[previous_char][j] * w / wholed); //potential rounding errors
+                a0 = a + roundl((long double)c[previous_char][j] * w / wholed);
+            }*/
+
+
+            assert( j>=0 and j < alphabet[previous_char].length() );
+            assert( c[previous_char][j] < d[previous_char][j] );
+            assert(((a0 <= z) and (z < b0)));
+            assert(a0 <= whole and b0 <= whole);
+            assert(a <= whole);
+            assert(b <= whole);
+            assert(a < b);
+            assert(a0 < b0);
+
+            output += alphabet[previous_char][j];
+            previous_char = alphabet[previous_char][j];
+
+            output_size_counter++;
+
+            a = a0;
+            b = b0;
+            // if () break;
+
+
+            //t1 = std::chrono::high_resolution_clock::now();
+            while (b < half or a >= half)
+            {
+                if (b < half)
+                {
+                    a *= 2;
+                    b *= 2;
+                    z *= 2;
+
+                }
+                else if (a >= half)
+                {
+                    a = (a-half)*2;
+                    b = (b-half)*2;
+                    z = (z-half)*2;
+                }
+
+                if (i < compressed_file_size ) {
+                    if (in_bit.getbit()) z++;
+                    i++;
+                }
+                assert( z <= b );
+            }
+            while (a >= quarter and b < 3*quarter)
+            {
+                a = (a-quarter)*2;
+                b = (b-quarter)*2;
+                z = (z-quarter)*2;
+                if (i < compressed_file_size) {
+                    if ( in_bit.getbit() ) z++;
+                    i++;
+                }
+                assert( z <= b );
+            }
+            //t2 = std::chrono::high_resolution_clock::now();
+
+            //durations_while.push_back( std::chrono::duration_cast<std::chrono::microseconds>(t2-t1) );
+            //durations_for.push_back( std::chrono::duration_cast<std::chrono::microseconds>(t1-t0) );
+        }
+        auto t2 = std::chrono::high_resolution_clock::now();
+
+        if (*aborting_var) return;
+
+        //std::chrono::microseconds while_time;
+        //for (auto wi : durations_while) while_time += wi;
+
+        //std::chrono::microseconds for_time;
+        //for (auto fi : durations_for) for_time += fi;
+
+        //std::cout << "for loops took:\t" << for_time.count() << std::endl;
+        //std::cout << "while loops took:\t" << while_time.count() << std::endl;
+
+        std::cout << "Preparations:\t" << std::chrono::duration_cast<std::chrono::milliseconds>(t1-t0).count() << " ms\n";
+        std::cout << "Decompression:\t" << std::chrono::duration_cast<std::chrono::milliseconds>(t2-t1).count() << " ms" << std::endl;
+
+
+        this->size = output.length();
+        delete[] this->text;
+        this->text = new uint8_t [this->size];
+
+        for (uint32_t j=0; j < this->size; ++j) this->text[j] = output[j];
+
+    }
+}
+
 
 Text_write_bitbuffer::Text_write_bitbuffer(std::string &output_string) {
     this->text = &output_string;
@@ -1287,7 +1766,7 @@ void Text_write_bitbuffer::flush() {
     if (bitcounter > 0)// for (uint32_t i=0; i <= bi+1; ++i) text->push_back(buffer[i]);
     {
         text->append( (char*)buffer, bi+1 );
-        std::cout << "buffer has stuff left in it, bi = " << bi << '\n';
+        // std::cout << "buffer has stuff left in it, bi = " << bi << '\n';
     }
     else //for (uint32_t i=0; i <= bi; ++i) text->push_back(buffer[i]);
     {
@@ -1332,8 +1811,6 @@ uint64_t Text_write_bitbuffer::get_output_size() const {
     return sum_of_outputted_bits;
 }
 
-
-// input_bitbuffer
 
 
 Text_read_bitbuffer::Text_read_bitbuffer(uint8_t compressed_text[], uint64_t compressed_size, uint64_t starting_position) {

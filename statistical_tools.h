@@ -25,6 +25,8 @@ public:
     void get_entropy();
     void iid_model_from_text( uint8_t text[], uint32_t text_size );
     void model_from_text_1back( uint8_t text[], uint32_t text_size );
+    void count_symbols_from_text_0back( uint8_t text[], uint32_t text_size );
+    void count_symbols_from_text_1back( uint8_t text[], uint32_t text_size );
 
 };
 
