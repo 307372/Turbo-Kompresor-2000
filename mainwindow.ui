@@ -115,13 +115,7 @@
     <addaction name="actionNew_archive"/>
     <addaction name="actionOpen_archive"/>
    </widget>
-   <widget class="QMenu" name="menuEdit">
-    <property name="title">
-     <string>Edit</string>
-    </property>
-   </widget>
    <addaction name="menuFiles"/>
-   <addaction name="menuEdit"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <action name="actionNew_archive">

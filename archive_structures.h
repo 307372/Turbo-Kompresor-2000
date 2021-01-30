@@ -89,7 +89,7 @@ struct file
 
     static const bool dont_abort = false;
 
-    void interpret_flags(std::fstream &archive_stream, const std::string& path_to_destination, bool decode, bool& aborting_var,
+    bool interpret_flags(std::fstream &archive_stream, const std::string& path_to_destination, bool decode, bool& aborting_var,
                          bool validate_integrity = true, uint16_t* progress_ptr = nullptr );
 
     void recursive_print(std::ostream &os) const;
@@ -98,17 +98,18 @@ struct file
 
     void parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_ptr<file> &shared_this );
 
-    void append_to_archive( std::fstream& archive_file, bool& aborting_var, bool write_siblings = true, uint16_t* progress_var = nullptr );
+    bool append_to_archive( std::fstream& archive_file, bool& aborting_var, bool write_siblings = true, uint16_t* progress_var = nullptr );
 
-    void write_to_archive( std::fstream& archive_file, bool& aborting_var, bool write_siblings = true, uint16_t* progress_var = nullptr );
+    bool write_to_archive( std::fstream& archive_file, bool& aborting_var, bool write_siblings = true, uint16_t* progress_var = nullptr );
 
-    void unpack( const std::string& path, std::fstream &os, bool& aborting_var, bool unpack_all, bool validate_integrity = true, uint16_t* progress_var = nullptr );
+    bool unpack( const std::string& path, std::fstream &os, bool& aborting_var, bool unpack_all, bool validate_integrity = true, uint16_t* progress_var = nullptr );
+    // returns bool which indicates whether decompression was successful
 
     std::string get_compressed_filesize_str(bool scaled);
 
     std::string get_uncompressed_filesize_str(bool scaled);
 
-    void copy_to_another_file( std::fstream& source, std::fstream& destination, uint64_t parent_location, uint64_t previous_sibling_location );
+    void copy_to_another_file( std::fstream& source, std::fstream& destination, uint64_t parent_location, uint64_t previous_sibling_location, uint16_t previous_name_length );
 
     void get_ptrs( std::vector<file*>& files, bool get_siblings_too = false );
 

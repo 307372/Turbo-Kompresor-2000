@@ -95,7 +95,7 @@ void MyDialog::closeEvent(QCloseEvent *event) {
                         std::cout << "is thread running? " << my_thread->isRunning() << std::endl;
                         while(!my_thread->wait(50));   // check if the thread finished working every 50ms
                         this->on_processing_finished(false);    // finished unsuccessfully
-
+                        QMessageBox::information(this, QString("Failed!"), QString("Processing failed!"));
                     }
                     event->accept();
                 }
@@ -191,6 +191,63 @@ void MyDialog::on_pushButton_abort_clicked()
     this->close();
 }
 
+void MyDialog::correct_duplicate_names(file* target_file, folder* parent_folder)
+{
+    std::vector<std::string> name_list;
+    if (parent_folder->child_file_ptr == nullptr) return;
+    else {
+        file* file_in_dir = parent_folder->child_file_ptr.get();
+        name_list.push_back(file_in_dir->name);
+
+        while (file_in_dir->sibling_ptr != nullptr)
+        {
+            file_in_dir = file_in_dir->sibling_ptr.get();
+            name_list.push_back(file_in_dir->name);
+        }
+        std::string new_name = std::filesystem::path(target_file->name).stem().string() + " (";
+        std::string extension = std::filesystem::path(target_file->name).extension().string();
+        uint64_t duplicate_counter = 0;
+        bool unique_name = false;
+
+        while( !unique_name ) {
+            bool found = false;
+            uint64_t names_like_current = 0;
+            for (auto current_name : name_list)
+            {
+                if (duplicate_counter == 0)
+                {
+                    if (target_file->name == current_name)
+                    {
+                        names_like_current++;
+                        if (names_like_current > 1) {
+                            duplicate_counter++;
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    if(new_name + std::to_string(duplicate_counter) + ")" + extension == current_name)
+                    {
+                        duplicate_counter++;
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (!found) unique_name = true;
+        }
+
+        if (duplicate_counter > 0)
+        {
+            target_file->name = new_name + std::to_string(duplicate_counter) + ")" + extension;
+            target_file->name_length = target_file->name.length();
+        }
+    }
+
+}
+
 void MyDialog::on_pushButton_compress_clicked()
 {
     // before we begin, let's create a temp file, on which we will be working
@@ -204,19 +261,21 @@ void MyDialog::on_pushButton_compress_clicked()
     if (parent_usertype == 1001) {  // TreeWidgetFolder
         for (auto &file_path : paths_to_files) {
             file* new_file_ptr = twfolder_ptr->archive_ptr->add_file_to_archive_model( *(twfolder_ptr->folder_ptr), file_path.toStdString(), flags );
+            correct_duplicate_names(new_file_ptr, twfolder_ptr->folder_ptr);
             list_of_files.push_back( new_file_ptr );
         }
     }
     else if (parent_usertype == 1002) { // TreeWidgetFile
         for (auto &file_path : paths_to_files) {
             file* new_file_ptr = twfile_ptr->archive_ptr->add_file_to_archive_model( *(twfile_ptr->file_ptr->parent_ptr), file_path.toStdString(), flags );
+            correct_duplicate_names(new_file_ptr, twfile_ptr->file_ptr->parent_ptr);
             list_of_files.push_back( new_file_ptr );
         }
     }
     else assert(false); // should never happen
 
     progress_step_value = 0;
-    th_compression = new thread_compression( list_of_files, &progress_step_value, parent_mw->temp_path );
+    th_compression = new thread_compression( list_of_files, &progress_step_value, &progressBarStepMax, parent_mw->temp_path );
     my_thread = new QThread;
     th_compression->moveToThread(my_thread);
 
@@ -226,7 +285,7 @@ void MyDialog::on_pushButton_compress_clicked()
     connect( th_compression, &thread_compression::setFilePathLabel, ui->label_currentfile_value, &QLabel::setText );
     connect( th_compression, &thread_compression::processing_finished, this,    &MyDialog::on_processing_finished );
     connect( this, &MyDialog::abort_processing, th_compression, &thread_compression::abort_processing, Qt::ConnectionType::DirectConnection );
-
+    connect( th_compression, &thread_compression::displayFailedFiles, this, &MyDialog::displayFailedFiles );
     startProcessingTimer();
     my_thread->start();
 }
@@ -243,6 +302,8 @@ void MyDialog::onProgressNextStep(double value) {
 }
 
 void MyDialog::on_processing_finished(bool successful) {
+    timer_elapsed_time->stop();
+    std::cout << "on_processing_finished" << std::endl;
     if (successful) {
         if (compression) {
             if (parent_mw->archive_ptr->archive_file.is_open()) parent_mw->archive_ptr->archive_file.close();
@@ -257,18 +318,18 @@ void MyDialog::on_processing_finished(bool successful) {
             parent_mw->archive_ptr->archive_file.open( parent_mw->archive_ptr->load_path, std::ios::binary | std::ios::in | std::ios::out );
         }
         std::cout << "Process of modifying the archive seems to have succeeded" << std::endl;
+        QMessageBox::information(this, QString("Success!"), QString("Processing succeeded!"));
+
     }
     else {
         if (compression) {
             std::cout << "Processing aborted" << std::endl;
 
-            bool result = std::filesystem::remove(parent_mw->temp_path);
-            assert( result );
+            std::filesystem::remove(parent_mw->temp_path);
 
             std::cout << "Cleanup successful" << std::endl;
         }
     }
-    timer_elapsed_time->stop();
     ui->buttonFinish->setDisabled(false);
     ui->buttonCancel->setDisabled(true);
 }
@@ -334,7 +395,7 @@ void MyDialog::on_buttonDecompressionStart_clicked()
     for (auto single_file   : files  ) single_file->ptr_already_gotten = false;
 
     progress_step_value = 0;
-    th_decompression = new decompression_object( files, parent_mw->archive_ptr->archive_file, confirm_integrity, &progress_step_value );
+    th_decompression = new decompression_object( files, parent_mw->archive_ptr->archive_file, confirm_integrity, &progress_step_value, &progressBarStepMax );
 
     my_thread = new QThread;
     th_decompression->moveToThread( my_thread );
@@ -346,12 +407,22 @@ void MyDialog::on_buttonDecompressionStart_clicked()
     connect( th_decompression, &decompression_object::setFilePathLabel, ui->label_currentfile_value, &QLabel::setText );
     connect( th_decompression, &decompression_object::processing_finished, this,    &MyDialog::on_processing_finished );
     connect( this, &MyDialog::abort_processing, th_decompression, &decompression_object::abort_processing, Qt::ConnectionType::DirectConnection );
+    connect( th_decompression, &decompression_object::displayFailedFiles, this, &MyDialog::displayFailedFiles );
 
     startProcessingTimer();
     my_thread->start();
 }
 
-
+void MyDialog::displayFailedFiles(QStringList failed_paths)
+{
+    QString contents;
+    // std::cout << "Displaying failed files:\n";
+    for (int32_t i=0; i < failed_paths.size(); ++i) {
+        // std::cout << failed_paths[i].toStdString() << std::endl;
+        contents.append(failed_paths[i] + "\n");
+    }
+    QMessageBox::information(this, "Failed files", contents);
+}
 
 void MyDialog::on_buttonDecompressionAbort_clicked()
 {
@@ -402,7 +473,8 @@ void MyDialog::onTimerTimeout() {
 
 
     ui->label_duration_value->setText( formatted_time );
-    ui->progressBarFile->setValue( progress_step_value );
+    std::cout << "progress: " << progress_step_value << " / " << progressBarStepMax << std::endl; // round(progress_step_value*100/progressBarStepMax) << std::endl;
+    ui->progressBarFile->setValue( round(progress_step_value*100/progressBarStepMax) );
 }
 
 void MyDialog::on_button_decompression_path_dialog_clicked()
@@ -415,13 +487,14 @@ void MyDialog::on_button_decompression_path_dialog_clicked()
 }
 
 
-thread_compression::thread_compression(std::vector<file*> given_file_list, uint16_t* progress_ptr, std::filesystem::path tmp_path) : QObject(nullptr)
+thread_compression::thread_compression(std::vector<file*> given_file_list, uint16_t* progress_ptr, uint32_t* progressBarStepMax, std::filesystem::path tmp_path) : QObject(nullptr)
 {
     temp_path = tmp_path;
     this->file_list = given_file_list;
     // this->stream = given_stream;
     this->aborting_variable = false;
     this->progress_step = progress_ptr;
+    this->progressBarStepMax = progressBarStepMax;
 
 
 }
@@ -440,30 +513,34 @@ void thread_compression::start_processing() {
 
 void thread_compression::abort_processing() {
     aborting_variable = true;
-    std::cout << "Abort! Abort! Abort!" << std::endl;
 }
 
 
 void thread_compression::start() {
-    std::cout << "thread running\n" << std::flush;
-
-    std::cout << "Aborting variable adress: " << &aborting_variable << std::endl;
-
     emit ProgressNextFile(0);
     emit ProgressNextStep(0);
+
+    QStringList failed_files;
+
     uint16_t i=0;
-    for (; i < file_list.size() and !aborting_variable; ++i)
+    for (; i < file_list.size(); ++i)
     {
-        std::cout << "aborting variable = " << aborting_variable << std::endl;
         emit setFilePathLabel( file_list[i]->path.data() );
 
-        file_list[i]->append_to_archive( temp_output, aborting_variable, false, progress_step );
+        *progress_step = 0;
+        std::bitset<16> bin_flags(file_list[i]->flags_value);
+        *progressBarStepMax = ceil((double)std::filesystem::file_size(file_list[i]->path) / (double)((1ull << 24)-1))*bin_flags.count();
 
+        bool successful = false;
+        if (!aborting_variable) successful = file_list[i]->append_to_archive( temp_output, aborting_variable, false, progress_step );
+
+        if (!successful) failed_files.append(QString::fromStdString(file_list[i]->path));
         emit ProgressNextFile((1.0+i)/(double)file_list.size()*100.0);
     }
 
     emit ProgressNextStep(100);
-    emit processing_finished( !aborting_variable ); // false if aborted
+    emit processing_finished( !aborting_variable and failed_files.empty() );
+    if (!failed_files.empty()) emit displayFailedFiles(failed_files);
 
     QThread::currentThread()->quit();
 }
@@ -471,13 +548,14 @@ void thread_compression::start() {
 
 
 
-decompression_object::decompression_object( std::vector<file*> file_list, std::fstream& source, bool validate_integrity, uint16_t* progress_ptr ) : QObject(nullptr)
+decompression_object::decompression_object( std::vector<file*> file_list, std::fstream& source, bool validate_integrity, uint16_t* progress_ptr, uint32_t* progressBarStepMax ) : QObject(nullptr)
 {
     this->file_list = file_list;
     this->source_stream = &source;
     this->aborting_variable = false;
     this->validate_integrity = validate_integrity;
     this->progress_step = progress_ptr;
+    this->progressBarStepMax = progressBarStepMax;
 }
 
 decompression_object::~decompression_object() {
@@ -499,23 +577,32 @@ void decompression_object::start() {
     emit ProgressNextFile(0);
     emit ProgressNextStep(0);
 
-    for (uint16_t i=0; i < file_list.size() and !aborting_variable; ++i)
+    QStringList failed_files;
+
+    for (uint16_t i=0; i < file_list.size(); ++i)
     {
-        *progress_step = 0;
         emit ProgressNextStep(0);
+
+        *progress_step = 0;
+        std::bitset<16> bin_flags(file_list[i]->flags_value);
+
+        *progressBarStepMax = ceill((long double)file_list[i]->uncompressed_size / (long double)((1ull << 24)-1))*bin_flags.count();
 
         std::filesystem::path label_path = file_list[i]->path;
         label_path.append( file_list[i]->name );
         emit setFilePathLabel( label_path.c_str() );
 
-        file_list[i]->unpack( file_list[i]->path, *source_stream, aborting_variable, false, validate_integrity, progress_step );
+        bool successful = false;
+        if (!aborting_variable) successful = file_list[i]->unpack( file_list[i]->path, *source_stream, aborting_variable, false, validate_integrity, progress_step );
         std::cout << "*progress_step = " << *progress_step << std::endl;
-
+        if (!successful) failed_files.append(QString::fromStdString(file_list[i]->path + '/' +file_list[i]->name));
 
         emit ProgressNextFile((1.0+i)/(double)file_list.size()*100.0);
     }
     emit ProgressNextStep(100);
-    emit processing_finished( !aborting_variable ); // false if aborted
+    std::cout << "decompression_object processing_finished" << std::endl;
+    emit processing_finished( !aborting_variable and failed_files.empty() );
+    if (!failed_files.empty()) emit displayFailedFiles(failed_files);
     QThread::currentThread()->quit();
 }
 

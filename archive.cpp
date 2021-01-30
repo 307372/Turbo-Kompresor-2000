@@ -41,6 +41,8 @@ void archive::load(const std::string& path_to_file )
 
     this->archive_file.seekg( 1 );
     this->archive_dir->parse( this->archive_file, 1, nullptr, this->archive_dir );
+    this->archive_dir->name = std::filesystem::path(path_to_file).filename();
+    this->archive_dir->name_length = this->archive_dir->name.length();
 }
 
 

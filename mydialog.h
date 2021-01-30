@@ -30,6 +30,7 @@ public:
     explicit MyDialog( TreeWidgetFolder* twfolder, QStringList file_path_list, QWidget *parent = nullptr );
     explicit MyDialog( TreeWidgetFile* twfile, QStringList file_path_list, QWidget *parent = nullptr );
     explicit MyDialog( std::vector<QTreeWidgetItem*> extraction_targets, QWidget *parent = nullptr );
+
     ~MyDialog();
 
     uint16_t progress_step_value = 0;
@@ -69,6 +70,8 @@ private slots:
 
     void on_button_decompression_path_dialog_clicked();
 
+    void displayFailedFiles(QStringList failed_paths);
+
 private:
     Ui::MyDialog *ui;
     MainWindow* parent_mw = nullptr;
@@ -79,6 +82,7 @@ private:
     QTimer* timer_elapsed_time = nullptr;
     decompression_object* th_decompression = nullptr;
 
+    uint32_t progressBarStepMax = 100;
     int16_t parent_usertype = -1;
     QStringList paths_to_files;
     std::chrono::time_point<std::chrono::high_resolution_clock> time_start;
@@ -88,7 +92,7 @@ private:
 
     void compression_start();
     void startProcessingTimer();
-
+    void correct_duplicate_names(file* target_file, folder* parent_folder);
 };
 
 
@@ -104,7 +108,7 @@ class thread_compression : public QObject
 {
     Q_OBJECT
 public:
-    explicit thread_compression( std::vector<file*> file_list, uint16_t* progress_ptr, std::filesystem::path tmp_path );
+    explicit thread_compression( std::vector<file*> file_list, uint16_t* progress_ptr, uint32_t* progressBarStepMax, std::filesystem::path tmp_path );
     ~thread_compression();
     void start();
 
@@ -113,6 +117,7 @@ public:
     std::filesystem::path temp_path;
     bool aborting_variable;
     uint16_t* progress_step;
+    uint32_t* progressBarStepMax = nullptr;
 
 
 
@@ -121,6 +126,7 @@ signals:
     void ProgressNextStep(double value);
     void setFilePathLabel(QString path);
     void processing_finished(bool successful);
+    void displayFailedFiles(QStringList failed_files);
 
 public slots:
     void start_processing();
@@ -134,7 +140,7 @@ public slots:
 class decompression_object : public QObject {
     Q_OBJECT
 public:
-    explicit decompression_object( std::vector<file*> file_list, std::fstream& source, bool validate_integrity, uint16_t* progress_ptr );
+    explicit decompression_object( std::vector<file*> file_list, std::fstream& source, bool validate_integrity, uint16_t* progress_ptr, uint32_t* progressBarStepMax );
     ~decompression_object();
     void start();
 
@@ -143,6 +149,7 @@ public:
 
     bool aborting_variable;
     uint16_t* progress_step;
+    uint32_t* progressBarStepMax = nullptr;
 
 
 
@@ -151,10 +158,12 @@ signals:
     void ProgressNextStep(double value);
     void setFilePathLabel(QString path);
     void processing_finished(bool successful);
+    void displayFailedFiles(QStringList failed_list);
 
 public slots:
     void start_processing();
     void abort_processing();
+
 private:
     bool validate_integrity;
 };

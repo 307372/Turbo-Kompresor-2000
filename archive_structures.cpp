@@ -13,7 +13,7 @@ void processing_worker( const int task, Compression* comp, uint16_t flags, bool&
             std::cout << "BWT encoding..." << std::endl;
             comp->BWT_make();
             progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+            if (progress_ptr != nullptr) (*progress_ptr)++;
 
         }
 
@@ -21,28 +21,28 @@ void processing_worker( const int task, Compression* comp, uint16_t flags, bool&
             std::cout << "MTF encoding..." << std::endl;
             comp->MTF_make();
             progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+            if (progress_ptr != nullptr) (*progress_ptr)++;
         }
 
         if (bin_flags[2] and !aborting_var) {
             std::cout << "RLE encoding..." << std::endl;
             comp->RLE_makeV2();
             progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+            if (progress_ptr != nullptr) (*progress_ptr)++;
         }
 
         if (bin_flags[3] and !aborting_var) {
             std::cout << "AC encoding..." << std::endl;
             comp->AC_make();
             progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+            if (progress_ptr != nullptr) (*progress_ptr)++;
         }
 
         if (bin_flags[4] and !aborting_var) {
             std::cout << "AC2 encoding..." << std::endl;
             comp->AC2_make();
             progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+            if (progress_ptr != nullptr) (*progress_ptr)++;
         }
     }
     else if (task == Compression::decompress)
@@ -51,35 +51,35 @@ void processing_worker( const int task, Compression* comp, uint16_t flags, bool&
             std::cout << "AC2 decoding..." << std::endl;
             comp->AC2_reverse();
             progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+            if (progress_ptr != nullptr) (*progress_ptr)++;
         }
 
         if ( bin_flags[3] and !aborting_var) {
             std::cout << "AC decoding..." << std::endl;
             comp->AC_reverse();
             progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+            if (progress_ptr != nullptr) (*progress_ptr)++;
         }
 
         if ( bin_flags[2] and !aborting_var) {
             std::cout << "RLE decoding..." << std::endl;
             comp->RLE_reverseV2();
             progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+            if (progress_ptr != nullptr) (*progress_ptr)++;
         }
 
         if ( bin_flags[1] and !aborting_var) {
             std::cout << "MTF decoding..." << std::endl;
             comp->MTF_reverse();
             progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+            if (progress_ptr != nullptr) (*progress_ptr)++;
         }
 
         if ( bin_flags[0] and !aborting_var ) {
             std::cout << "BWT decoding..." << std::endl;
             comp->BWT_reverse();
             progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
+            if (progress_ptr != nullptr) (*progress_ptr)++;
         }
     }
     *is_finished = true;
@@ -87,7 +87,7 @@ void processing_worker( const int task, Compression* comp, uint16_t flags, bool&
 
 void processing_scribe( const int task, std::fstream& output, std::vector<Compression*>& comp_v, bool worker_finished[],
                         std::vector<std::thread>& workers, uint32_t block_count, uint64_t* compressed_size,
-                        std::string& checksum, bool& checksum_done, uint64_t original_size, bool& aborting_var )
+                        std::string& checksum, bool& checksum_done, uint64_t original_size, bool& aborting_var, bool* successful )
 {
     assert( output.is_open() );
     uint32_t next_to_write = 0;  // index of last written block of data in comp_v
@@ -95,6 +95,8 @@ void processing_scribe( const int task, std::fstream& output, std::vector<Compre
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     while ( next_to_write != block_count )
     {
+        if (aborting_var) return;
+
         if (worker_finished[next_to_write]) {
             if (task == Compression::compress) {
                 std::stringstream block_metadata;
@@ -102,7 +104,7 @@ void processing_scribe( const int task, std::fstream& output, std::vector<Compre
                 block_metadata.write((char *) &comp_v[next_to_write]->size,
                                      sizeof(comp_v[next_to_write]->size));
                 output << block_metadata.rdbuf();
-                *compressed_size += comp_v[next_to_write]->size;
+                *compressed_size += comp_v[next_to_write]->size + 4 + 4;    // due to part number and block size
             }
 
             comp_v[next_to_write]->save_text(output);
@@ -113,12 +115,16 @@ void processing_scribe( const int task, std::fstream& output, std::vector<Compre
         else std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     if (task == Compression::compress) {
-        while (!checksum_done) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        while (!checksum_done or aborting_var) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        if (aborting_var) return;
         if (checksum.length() != 0) output.write(checksum.c_str(), checksum.length());
+        *successful = true; // if this didn't crash, then I guess it succeeded
+
     }
     else if (task == Compression::decompress)
     {
         while (!checksum_done) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        if (aborting_var) return;
         if (checksum.length() != 0)
         {
 
@@ -136,19 +142,26 @@ void processing_scribe( const int task, std::fstream& output, std::vector<Compre
             }
             else std::cout << "Weird checksum..." << std::endl;
             std::cout << "Checksums:\nOld: " << checksum << "\nNew: " << new_checksum << '\n';
-            if (new_checksum == checksum) std::cout << "Decompression successful!" << std::endl;
-            else std::cout << "Decompression failed!" << std::endl;
+            if (new_checksum == checksum) {
+                *successful = true;
+                std::cout << "Decompression successful!" << std::endl;
+            }
+            else {
+                *successful = false;
+                std::cout << "Decompression failed!" << std::endl;
+            }
         }
+        else *successful = true;    // if the checksum is not checked, we assume success
 
     }
     if (output.is_open() and task == Compression::decompress) output.close();
 }
 
-void processing_foreman( std::fstream &archive_stream, const std::string& target_path, const int task, uint16_t flags,
+bool processing_foreman( std::fstream &archive_stream, const std::string& target_path, const int task, uint16_t flags,
                          uint64_t original_size, uint64_t* compressed_size, bool& aborting_var, bool validate_integrity, uint16_t* progress_ptr )
 {
     // 1. delegates work to each thread
-    // 2. calculates checksum and sends it to scribe, after every block of data is processed
+    // 2. calculates checksum and sends it to scribe, after all the blocks of data have been processed
     std::bitset<16> bin_flags = flags;
     uint32_t block_size = 1 << 24;  // 2^24 Bytes = 16 MiB, default block size
 
@@ -156,7 +169,7 @@ void processing_foreman( std::fstream &archive_stream, const std::string& target
     if ( bin_flags[10] ) block_size >>= 2;
     if ( bin_flags[11] ) block_size >>= 4;
     if ( bin_flags[12] ) block_size >>= 8;
-    // std::cout << "Block size: " << block_size << std::endl;
+
 
 
     uint32_t block_count = ceill((long double)original_size / block_size);
@@ -172,8 +185,6 @@ void processing_foreman( std::fstream &archive_stream, const std::string& target
     if (worker_count == 0) worker_count = 2;
     if (worker_count > block_count) worker_count = block_count;
 
-
-    // std::fstream input(src_path, std::ios::binary | std::ios::in | std::ios::out);
     std::fstream target_stream;
     if (task == Compression::compress) target_stream.open(target_path, std::ios::binary | std::ios::in | std::ios::out);
     else if (task == Compression::decompress)
@@ -192,7 +203,6 @@ void processing_foreman( std::fstream &archive_stream, const std::string& target
         task_finished_arr[i] = false;
         task_started_arr[i] = false;
     }
-    std::vector<uint16_t> progress_counters(block_count, 0);
 
     std::vector<std::thread> workers;
     std::string checksum;
@@ -214,7 +224,7 @@ void processing_foreman( std::fstream &archive_stream, const std::string& target
             comp_v[i]->load_text(archive_stream, comp_v[i]->size);
         }
         workers.emplace_back(&processing_worker, task, comp_v[i], flags, std::ref(aborting_var),
-                             &task_finished_arr[i], &progress_counters[i]);
+                             &task_finished_arr[i], progress_ptr);
         task_started_arr[i] = true;
         lowest_free_work_ind++;
     }
@@ -225,19 +235,21 @@ void processing_foreman( std::fstream &archive_stream, const std::string& target
         delete[] task_started_arr;
         for (auto & comp : comp_v) delete comp;
 
-        return;
+        return false;
     }
 
     std::thread scribe;
 
+    bool successful = false;
+
     if (task == Compression::compress)
         scribe = std::thread( &processing_scribe, task, std::ref(archive_stream), std::ref(comp_v),
                               task_finished_arr, std::ref(workers), block_count, compressed_size,
-                              std::ref(checksum), std::ref(checksum_done), original_size, std::ref(aborting_var) );
+                              std::ref(checksum), std::ref(checksum_done), original_size, std::ref(aborting_var), &successful );
     else if (task == Compression::decompress)
         scribe = std::thread( &processing_scribe, task, std::ref(target_stream), std::ref(comp_v), task_finished_arr,
                               std::ref(workers), block_count, compressed_size, std::ref(checksum), std::ref(checksum_done),
-                              original_size, std::ref(aborting_var) );
+                              original_size, std::ref(aborting_var), &successful );
 
     while (lowest_free_work_ind != block_count and !aborting_var) {
 
@@ -263,7 +275,7 @@ void processing_foreman( std::fstream &archive_stream, const std::string& target
                                          flags,
                                          std::ref(aborting_var),
                                          &task_finished_arr[lowest_free_work_ind],
-                                         &progress_counters[lowest_free_work_ind]);
+                                         progress_ptr);
 
                     lowest_free_work_ind++;
                 }
@@ -273,13 +285,13 @@ void processing_foreman( std::fstream &archive_stream, const std::string& target
 
     if (aborting_var)
     {
-        for (auto& th: workers) th.join();
+        for (auto& th: workers) if (th.joinable()) th.join();
         if (scribe.joinable()) scribe.join();
         delete[] task_finished_arr;
         delete[] task_started_arr;
         for (auto & comp : comp_v) delete comp;
 
-        return;
+        return false;
     }
 
     if (task == Compression::compress) {
@@ -319,303 +331,29 @@ void processing_foreman( std::fstream &archive_stream, const std::string& target
     delete[] task_finished_arr;
     delete[] task_started_arr;
     for (auto & comp : comp_v) delete comp;
+
+    if (aborting_var) return false;
+    // std::cout << "Successful = " << successful << std::endl;
+    return successful;
 }
 
 
 
-void file::interpret_flags(std::fstream &archive_stream, const std::string& path_to_destination, bool encode, bool& aborting_var, bool validate_integrity, uint16_t* progress_ptr ) {
+bool file::interpret_flags(std::fstream &archive_stream, const std::string& path_to_destination, bool encode, bool& aborting_var, bool validate_integrity, uint16_t* progress_ptr ) {
 
+    bool successful = false;
     if (encode == true)
     {
-        processing_foreman(archive_stream, this->path, Compression::compress, flags_value, uncompressed_size,
+        successful = processing_foreman(archive_stream, this->path, Compression::compress, flags_value, uncompressed_size,
                            &this->compressed_size, aborting_var, validate_integrity, progress_ptr );
     }
     else
     {
         archive_stream.seekg(this->data_location);
-        processing_foreman(archive_stream, path_to_destination + '/' + this->name, Compression::decompress, flags_value,
+        successful = processing_foreman(archive_stream, path_to_destination + '/' + this->name, Compression::decompress, flags_value,
                            uncompressed_size, &this->compressed_size, aborting_var, validate_integrity, progress_ptr );
     }
-
-    /*
-    std::bitset<16> bin_flags = this->flags_value;
-    std::cout << "flags:\n" << bin_flags.to_string() << std::endl;
-    Compression comp( aborting_var );
-
-    assert( bin_flags.any() );
-    uint16_t progress_counter = 0;
-    uint16_t whole = bin_flags.count();
-    std::cout << "Progress ptr = " << progress_ptr << std::endl;
-
-    if (progress_ptr != nullptr) (*progress_ptr) = 0;
-    // loading data for processing into Compression object, and then processing it according to flags
-
-
-    if (encode) {
-        std::fstream input(this->path, std::ios::binary | std::ios::in);
-        comp.load_text( input, this->uncompressed_size );
-
-        input.close();
-
-        std::basic_string<char> CRC32_before;
-
-        if ( bin_flags[14] ) {
-            integrity_validation iv;
-            CRC32_before = iv.get_CRC32_from_text(comp.text, comp.size, aborting_var);
-            progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
-
-        }
-
-        if ( bin_flags[0] ) {
-            std::cout << "BWT encoding..." << std::endl;
-            comp.BWT_make();
-            progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
-
-        }
-
-        if ( bin_flags[1] ) {
-            std::cout << "MTF encoding..." << std::endl;
-            comp.MTF_make();
-            progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
-        }
-
-        if ( bin_flags[2] ) {
-            std::cout << "RLE encoding..." << std::endl;
-            comp.RLE_makeV2();
-            progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
-        }
-
-        if ( bin_flags[3] ) {
-            std::cout << "AC encoding..." << std::endl;
-            comp.AC_make();
-            progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
-        }
-
-        if ( bin_flags[4] ) {
-            std::cout << "AC2 encoding..." << std::endl;
-            comp.AC2_make();
-            progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
-        }
-
-        if ( bin_flags[5] ) {
-            std::cout << "Bit 5/32\t\tis true - " << std::endl;
-            throw FlagReservedException();
-        }
-
-        if ( bin_flags[6] ) {
-            std::cout << "Bit 6/64\t\tis true - " << std::endl;
-            throw FlagReservedException();
-        }
-
-        if ( bin_flags[7] ) {
-            std::cout << "Bit 7/128\t\tis true - " << std::endl;
-
-            throw FlagReservedException();
-        }
-
-        if ( bin_flags[8] ) {
-            std::cout << "Bit 8/256\t\tis true - " << std::endl;
-
-            throw FlagReservedException();
-        }
-
-        if ( bin_flags[9] ) {
-            std::cout << "Bit 9/512\t\tis true - " << std::endl;
-
-            throw FlagReservedException();
-        }
-
-        if ( bin_flags[10] ) {
-            std::cout << "Bit 10/1024\t\tis true - " << std::endl;
-
-            throw FlagReservedException();
-        }
-
-        if ( bin_flags[11] ) {
-            std::cout << "Bit 11/2048\t\tis true - " << std::endl;
-
-            throw FlagReservedException();
-        }
-
-        if ( bin_flags[12] ) {
-            std::cout << "Bit 12/4096\t\tis true - " << std::endl;
-
-            throw FlagReservedException();
-        }
-
-        if ( bin_flags[13] ) {
-            std::cout << "Bit 13/8192\t\tis true - " << std::endl;
-
-            throw FlagReservedException();
-        }
-
-        comp.save_text(archive_stream);
-        this->compressed_size = comp.size;
-
-        if ( bin_flags[14] ) {
-            std::cout << "Appending CRC-32..." << std::endl;
-            if (!aborting_var) {
-                assert( CRC32_before.length() == 10 );
-                archive_stream.write(CRC32_before.c_str(), CRC32_before.length() );
-            }
-            progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
-
-        }
-
-
-        if ( bin_flags[15] ) {
-            std::cout << "Appending SHA-1..." << std::endl;
-            integrity_validation iv;
-            std::basic_string<char> sha_not_encoded = iv.get_SHA1_from_file(this->path, aborting_var);
-            if (!aborting_var) {
-                assert( sha_not_encoded.length() == 40 );
-                archive_stream.write(sha_not_encoded.c_str(), sha_not_encoded.length() );
-            }
-            progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
-        }
-
-        std::cout << "Encoding finished." << std::endl;
-
-    }
-    else {  // decompression
-        archive_stream.seekg(this->data_location);
-        comp.load_text(archive_stream, this->compressed_size );
-
-
-
-        if ( bin_flags[13] ) {
-            std::cout << "Bit 13/8192\t\tis true - " << std::endl;
-            throw FlagReservedException();
-        }
-
-        if ( bin_flags[12] ) {
-            std::cout << "Bit 12/4096\t\tis true - " << std::endl;
-            throw FlagReservedException();
-        }
-
-        if ( bin_flags[11] ) {
-            std::cout << "Bit 11/2048\t\tis true - " << std::endl;
-            throw FlagReservedException();
-        }
-
-        if ( bin_flags[10] ) {
-            std::cout << "Bit 10/1024\t\tis true - " << std::endl;
-            throw FlagReservedException();
-        }
-
-        if ( bin_flags[9] ) {
-            std::cout << "Bit 9/512\t\tis true - " << std::endl;
-            throw FlagReservedException();
-        }
-
-        if ( bin_flags[8] ) {
-            std::cout << "Bit 8/256\t\tis true - " << std::endl;
-            throw FlagReservedException();
-        }
-
-        if ( bin_flags[7] ) {
-            std::cout << "Bit 7/128\t\tis true - " << std::endl;
-            throw FlagReservedException();
-        }
-
-        if ( bin_flags[6] ) {
-            std::cout << "Bit 6/64\t\tis true - " << std::endl;
-            throw FlagReservedException();
-        }
-
-        if ( bin_flags[5] ) {
-            std::cout << "Bit 5/32\t\tis true - " << std::endl;
-            throw FlagReservedException();
-        }
-
-        if ( bin_flags[4] ) {
-            std::cout << "AC2 decoding..." << std::endl;
-            comp.AC2_reverse();
-            progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
-        }
-
-        if ( bin_flags[3] ) {
-            std::cout << "AC decoding..." << std::endl;
-            comp.AC_reverse();
-            progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
-        }
-
-        if ( bin_flags[2] ) {
-            std::cout << "RLE decoding..." << std::endl;
-            comp.RLE_reverseV2();
-            progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
-        }
-
-        if ( bin_flags[1] ) {
-            std::cout << "MTF decoding..." << std::endl;
-            comp.MTF_reverse();
-            progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
-        }
-
-        if ( bin_flags[0] ) {
-            std::cout << "BWT decoding..." << std::endl;
-            comp.BWT_reverse();
-            progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
-        }
-
-
-        std::cout << "Decoding path: " << path_to_destination << std::endl;
-        std::fstream output(path_to_destination + "/" + this->name, std::ios::binary | std::ios::out);
-        assert( output.is_open() );
-        comp.save_text(output);
-        output.close();
-        std::cout << "Decoding finished." << std::endl;
-
-        if ( bin_flags[14] and validate_integrity ) {
-            std::cout << "Comparing CRC-32..." << std::endl;
-            integrity_validation iv;
-
-            std::string CRC32_before = std::string( 10, ' ');
-            archive_stream.read(&CRC32_before[0], 10 );
-
-            std::string CRC32_after = iv.get_CRC32_from_text(comp.text, comp.size, aborting_var);
-            if ( !aborting_var ) {
-                if ( CRC32_before == CRC32_after )
-                    std::cout << "File integrity confirmed.\n" << "before: " << CRC32_before << "\nafter:  " << CRC32_after << std::endl;
-                else
-                    std::cout << "File integrity compromised!!!\n" << "before: " << CRC32_before << "\nafter:  " << CRC32_after << std::endl;
-            }
-            progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
-
-        }
-
-        if ( bin_flags[15] and validate_integrity ) {
-            std::cout << "Comparing SHA-1..." << std::endl;
-            integrity_validation iv;
-
-            std::string sha_before_encoding = std::string( 40, ' ');
-            archive_stream.read(&sha_before_encoding[0], 40 );
-            std::string sha_after_decoding = iv.get_SHA1_from_file( path_to_destination + "/" + this->name, aborting_var );
-            if ( !aborting_var ) {
-                if ( sha_after_decoding == sha_before_encoding )
-                    std::cout << "File integrity confirmed.\n" << "before: " << sha_before_encoding << "\nafter:  " << sha_after_decoding << std::endl;
-                else
-                    std::cout << "File integrity compromised!!!\n" << "before: " << sha_before_encoding << "\nafter:  " << sha_after_decoding << std::endl;
-            }
-            progress_counter++;
-            if (progress_ptr != nullptr) *progress_ptr = calculate_progress(progress_counter, whole);
-        }
-    }
-*/
+    return successful;
 }
 
 void file::recursive_print(std::ostream &os) const {
@@ -691,8 +429,9 @@ void file::parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_pt
 
 }
 
-void file::write_to_archive( std::fstream &archive_file, bool& aborting_var, bool write_siblings, uint16_t* progress_var ) {
+bool file::write_to_archive( std::fstream &archive_file, bool& aborting_var, bool write_siblings, uint16_t* progress_var ) {
     std::cout << "name of this file is: " << this->name << std::endl;
+    bool successful = false;
     if (!this->alreadySaved and !aborting_var) {
         this->alreadySaved = true;
         location = archive_file.tellp();
@@ -793,7 +532,7 @@ void file::write_to_archive( std::fstream &archive_file, bool& aborting_var, boo
         data_location = backup_end_of_metadata;
 
         // encoding
-        interpret_flags( archive_file, "encoding has it's path in the file object", true, aborting_var, true, progress_var );
+        successful = interpret_flags( archive_file, "encoding has it's path in the file object", true, aborting_var, true, progress_var );
 
         std::cout << "compressed size: " << compressed_size << std::endl;
 
@@ -817,27 +556,28 @@ void file::write_to_archive( std::fstream &archive_file, bool& aborting_var, boo
     }
 
     if (sibling_ptr and write_siblings and !aborting_var) sibling_ptr->write_to_archive( archive_file, aborting_var, write_siblings );
-
+    return successful;
 }
 
-void file::unpack( const std::string& path_to_destination, std::fstream &os, bool& aborting_var, bool unpack_all, bool validate_integrity, uint16_t* progress_var )
+bool file::unpack( const std::string& path_to_destination, std::fstream &os, bool& aborting_var, bool unpack_all, bool validate_integrity, uint16_t* progress_var )
 {
     std::cout << "Unpacking file " << name << "..." << std::endl;
 
     uint64_t backup_g = os.tellg();
     os.seekg( this->data_location );
 
-    interpret_flags( os, path_to_destination, false, aborting_var, validate_integrity, progress_var );
+    bool success = interpret_flags( os, path_to_destination, false, aborting_var, validate_integrity, progress_var );
 
     os.seekg( backup_g );
 
-    std::cout << "File " << name << " with compressed size of " << compressed_size << " unpacked\n" << std::endl;
+    // std::cout << "File " << name << " with compressed size of " << compressed_size << " unpacked\n" << std::endl;
 
     if (sibling_ptr != nullptr and unpack_all)
     {
         sibling_ptr->unpack( path_to_destination, os, aborting_var, unpack_all, validate_integrity, progress_var );
     }
 
+    return success;
 }
 
 std::string file::get_compressed_filesize_str(bool scaled) {
@@ -960,6 +700,7 @@ void folder::parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_
 {
     uint8_t buffer[8];
     os.seekg( pos );
+
     this->alreadySaved = true;
     this->location = pos;
     this->name_length = (uint8_t)os.get();
@@ -1015,10 +756,132 @@ void folder::append_to_archive( std::fstream& archive_file, bool& aborting_var )
     this->write_to_archive( archive_file, aborting_var );
 }
 
-void file::append_to_archive( std::fstream& archive_file, bool& aborting_var, bool write_siblings, uint16_t* progress_var ) {
+bool file::append_to_archive( std::fstream& archive_file, bool& aborting_var, bool write_siblings, uint16_t* progress_var ) {
     archive_file.seekp(0, std::ios_base::end);
-    this->write_to_archive( archive_file, aborting_var, write_siblings, progress_var );
+    return this->write_to_archive( archive_file, aborting_var, write_siblings, progress_var );
 }
+
+/*
+// experimental version without having root folder's name saved
+void folder::write_to_archive( std::fstream &archive_file, bool& aborting_var ) {
+
+    if (!this->alreadySaved) {
+        this->alreadySaved = true;
+        location = archive_file.tellp();
+
+        if (parent_ptr != nullptr) { // correcting current dir's location in model, and in file
+            if ( parent_ptr->child_dir_ptr.get() == this ) {
+                // update parent's knowledge of it's firstborn's location in file
+                std::cout << " parent_ptr->child_dir_ptr.get() == this" << std::endl;
+
+                uint64_t backup_p = archive_file.tellp();
+
+                archive_file.seekp( parent_ptr->location + 1 + parent_ptr->name_length + 8 ); // seekp( start of child_dir_location in archive file )
+                auto buffer = new uint8_t[8];
+
+                for (uint8_t i=0; i < 8; i++)
+                    buffer[i] = ( location >> (i*8u)) & 0xFFu; // Potentially fixed?
+
+                archive_file.write((char*)buffer, 8);
+                delete[] buffer;
+
+                archive_file.seekp( backup_p );
+            }
+            else {
+                folder* previous_folder = parent_ptr->child_dir_ptr.get();
+                while( previous_folder->sibling_ptr != nullptr )
+                {
+                    if (this != previous_folder->sibling_ptr.get())
+                        previous_folder = previous_folder->sibling_ptr.get();
+                    else
+                        break;
+                }
+
+                std::cout << name << "\t" << location << std::endl;
+
+                uint64_t backup_p = archive_file.tellp();
+                archive_file.seekp( previous_folder->location + 1 + previous_folder->name_length + 16 ); // seekp( start of sibling_location in archive file )
+                auto buffer = new uint8_t[8];
+
+                for (uint8_t i=0; i < 8; i++)
+                    buffer[i] = ( location >> (i*8u)) & 0xFFu; // Potentially fixed?
+
+                archive_file.write((char*)buffer, 8);
+                delete[] buffer;
+
+                archive_file.seekp( backup_p );
+            }
+        }
+
+        uint32_t buffer_size = base_metadata_size+name_length;
+        if (this->parent_ptr == nullptr) buffer_size = base_metadata_size;  // root folder is nameless
+
+        auto buffer = new uint8_t[buffer_size];
+        uint32_t bi=0; //buffer index
+
+        if (this->parent_ptr != nullptr) buffer[bi] = name_length;   //writing name length to file
+        else buffer[bi] = 0;
+        bi++;
+
+        if (this->parent_ptr != nullptr) {
+            for (uint16_t i=0; i < name_length; i++)    //writing name to file
+                buffer[bi+i] = name[i];
+            bi += name_length;
+        }
+
+        if (parent_ptr)
+            for (uint8_t i = 0; i < 8; i++)
+                buffer[bi + i] = (parent_ptr->location >> (i * 8u)) & 0xFFu;
+        else
+            for (uint8_t i = 0; i < 8; i++)
+                buffer[bi + i] = 0;
+        bi += 8;
+
+        if (child_dir_ptr)
+            for (uint8_t i=0; i < 8; i++)
+                buffer[bi+i] = (child_dir_ptr->location >> (i*8u)) & 0xFFu;
+        else
+            for (uint8_t i = 0; i < 8; i++)
+                buffer[bi + i] = 0;
+        bi+=8;
+
+        if (sibling_ptr) {
+            for (uint8_t i = 0; i < 8; i++)
+                buffer[bi + i] = (sibling_ptr->location >> (i * 8u)) & 0xFFu;
+            bi += 8;
+        } else {
+            for (uint8_t i = 0; i < 8; i++)
+                buffer[bi + i] = 0;
+            bi += 8;
+        }
+
+        if (child_file_ptr)
+            for (uint8_t i=0; i < 8; i++)
+                buffer[bi+i] = (child_file_ptr->location >> (i*8u)) & 0xFFu;
+        else
+            for (uint8_t i=0; i < 8; i++)
+                buffer[bi+i] = 0;
+
+
+        assert( bi+8 == buffer_size );
+
+        archive_file.write((char*)buffer, buffer_size);
+        // std::cout << "Folder " << name << " tellp() = " << archive_file.tellp() << std::endl;
+        // std::cout << "child_folder_location " << child_file_location << std::endl;
+        delete[] buffer;
+    }
+
+    if (sibling_ptr)
+        sibling_ptr->write_to_archive( archive_file, aborting_var );
+
+    if (child_file_ptr)
+        child_file_ptr->write_to_archive( archive_file, aborting_var );
+
+    if (child_dir_ptr)
+        child_dir_ptr->write_to_archive( archive_file, aborting_var );
+
+}
+*/
 
 void folder::write_to_archive( std::fstream &archive_file, bool& aborting_var ) {
 
@@ -1301,7 +1164,7 @@ void folder::copy_to_another_file( std::fstream& src, std::fstream& dst, uint64_
         delete[] buffer;
 
         if (sibling_ptr) sibling_ptr->copy_to_another_file(src, dst, parent_location, dst_location);
-        if (child_file_ptr) child_file_ptr->copy_to_another_file(src, dst, dst_location, 0);
+        if (child_file_ptr) child_file_ptr->copy_to_another_file(src, dst, dst_location, 0, 0);
         if (child_dir_ptr) child_dir_ptr->copy_to_another_file(src, dst, dst_location, 0);
     }
     else
@@ -1313,15 +1176,33 @@ void folder::copy_to_another_file( std::fstream& src, std::fstream& dst, uint64_
 
 }
 
-void file::copy_to_another_file( std::fstream& src, std::fstream& dst, uint64_t parent_location, uint64_t previous_sibling_location )
+void file::copy_to_another_file( std::fstream& src, std::fstream& dst, uint64_t parent_location, uint64_t previous_sibling_location, uint16_t previous_name_length )
 {
     if (!this->ptr_already_gotten) {    // if ptr_already_gotten, don't copy this
+
+        assert(parent_location != 0);
 
         dst.seekp(0, std::ios_base::end);
         uint64_t dst_location = dst.tellp();
 
         src.seekg(this->location);
 
+        if (previous_sibling_location == 0)
+        {
+            dst.seekp( parent_location + 1 + parent_ptr->name_length + 24 ); // seekp( start of child_file_location in archive file )
+            dst.write((char*)&dst_location, 8);
+
+        }
+        else
+        {
+            assert(previous_name_length != 0 and previous_name_length < 256);
+            dst.seekp( previous_sibling_location + 1 + previous_name_length + 8 ); // seekp( start of sibling_location in archive file )
+            dst.write((char*)&dst_location, 8);
+        }
+
+        dst.seekp(0, std::ios_base::end);
+
+        /*
         if (parent_ptr != nullptr) {
             assert(parent_location != 0);
             // correcting current file's location in model, and in the file
@@ -1339,7 +1220,8 @@ void file::copy_to_another_file( std::fstream& src, std::fstream& dst, uint64_t 
 
 
 
-            }
+            }*/
+        /*
             else {
                 file* file_ptr = parent_ptr->child_file_ptr.get(); // location of previous file in the same dir
                 while( file_ptr->sibling_ptr != nullptr )
@@ -1361,9 +1243,9 @@ void file::copy_to_another_file( std::fstream& src, std::fstream& dst, uint64_t 
                 delete[] buffer;
             }
         }
+        */
 
 
-        dst.seekp(0, std::ios_base::end);
 
         uint32_t buffer_size = base_metadata_size+name_length;
         auto buffer = new uint8_t[buffer_size];
@@ -1426,10 +1308,12 @@ void file::copy_to_another_file( std::fstream& src, std::fstream& dst, uint64_t 
         uint64_t total_data_size = this->compressed_size;
         if ((this->flags_value & (1<<15))>>15) // if it's got SHA-1 appended
         {
+            std::cout << "SHA-1 accounted for" << std::endl;
             total_data_size += 40;  // length of SHA-1 in my file (bytes)
         }
         else if ((this->flags_value & (1<<14))>>14) // if it's got CRC-32 appended
         {
+            // std::cout << "CRC-32 accounted for" << std::endl;
             total_data_size += 10;  // length of CRC-32 in my file (bytes)
         }
 
@@ -1449,12 +1333,11 @@ void file::copy_to_another_file( std::fstream& src, std::fstream& dst, uint64_t 
         delete[] output_buffer;
 
 
-        if (sibling_ptr) sibling_ptr->copy_to_another_file(src, dst, parent_location, dst_location);
+        if (sibling_ptr) sibling_ptr->copy_to_another_file(src, dst, parent_location, dst_location, this->name_length);
     }
     else if (sibling_ptr){
         assert(previous_sibling_location < UINT32_MAX);
-        sibling_ptr->copy_to_another_file(src, dst, parent_location, previous_sibling_location);
-
+        sibling_ptr->copy_to_another_file(src, dst, parent_location, previous_sibling_location, previous_name_length);
     }
 }
 

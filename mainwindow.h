@@ -16,8 +16,6 @@
 #include "mydialog.h"
 #include "config.h"
 
-#include <QCommonStyle>
-
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
@@ -25,7 +23,6 @@ QT_END_NAMESPACE
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
-
 
 public:
     MainWindow(QWidget *parent = nullptr);
@@ -43,7 +40,6 @@ public:
 
     QString style_dark = "";
     QString style_light = "";
-    QString style_default = "";
 
     std::filesystem::path temp_path = std::filesystem::temp_directory_path().append( "tk2k_archive.tmp" );
 
@@ -78,7 +74,6 @@ public:
     folder* folder_ptr;
     archive* archive_ptr;
 
-
     TreeWidgetFolder(QTreeWidgetItem *parent, folder* ptr_to_folder, archive* ptr_to_archive, bool filesize_scaled );
     TreeWidgetFolder(TreeWidgetFolder *parent, folder* ptr_to_folder, archive* ptr_to_archive, bool filesize_scaled );
 
@@ -100,8 +95,6 @@ public:
     void unpack( std::string path_for_extraction, bool& aborting_var );
     void setDisabled(bool disabled);
     bool operator<(const QTreeWidgetItem &other)const;
-
-
 };
 
 

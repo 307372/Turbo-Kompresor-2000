@@ -63,6 +63,7 @@ void MainWindow::load_archive( std::string path_to_archive ) {
     this->archive_ptr->load( path_to_archive );
 
     ui->archiveWidget->addTopLevelItem( new TreeWidgetFolder( ui->archiveWidget->invisibleRootItem(), archive_ptr->archive_dir.get(), archive_ptr, config_ptr->get_filesize_scaling() ) );
+    ui->archiveWidget->topLevelItem(0)->setText(0, QString::fromStdString(std::filesystem::path(path_to_archive).filename()));
     this->ui->archiveWidget->expandAll();
 
     this->ui->archiveWidget->sortByColumn(0, Qt::SortOrder::AscendingOrder);
@@ -188,21 +189,17 @@ void MainWindow::on_buttonExtractSelected_clicked()
 
 void MainWindow::on_buttonExtractAll_clicked()
 {
-    // std::cout << ui->archiveWidget->topLevelItem(0)->text(0).toStdString() << std::endl;
-    std::cout << archive_ptr->archive_dir->name << std::endl;
-    // auto selected = ui->archiveWidget->selectedItems();
+    // if there's no open archive, extract nothing
+    if (ui->archiveWidget->invisibleRootItem()->childCount() == 0) return;
 
-    // if (!selected.empty()) {
+    std::vector<QTreeWidgetItem*> extraction_targets;
+    extraction_targets.push_back(ui->archiveWidget->topLevelItem(0));
 
-        std::vector<QTreeWidgetItem*> extraction_targets;
-        extraction_targets.push_back(ui->archiveWidget->topLevelItem(0));
+    MyDialog md( extraction_targets,  this);
+    md.prepare_GUI_decompression();
+    md.exec();
 
-        MyDialog md( extraction_targets,  this);
-        md.prepare_GUI_decompression();
-        md.exec();
-
-        this->reload_archive();
-    //}
+    this->reload_archive();
 }
 
 
@@ -440,32 +437,22 @@ bool TreeWidgetFile::operator<(const QTreeWidgetItem &other)const {
 
     case 2: // sort by compressed size
         if (this->type() == other.type() ) {
-            if ( this->type() == 1001 ) { // both this and other are TreeWidgetFolders
-                if ( this->text(0) < other.text(0) ) return true;    // just sort them alphabetically by name
-                else return false;
-            }
-            else {  // both this and other are TreeWidgetFiles
+           // both this and other are TreeWidgetFiles
                 TreeWidgetFile* twfile = (TreeWidgetFile*)(&other);
                 if ( this->file_ptr->compressed_size < twfile->file_ptr->compressed_size ) return true;
                 else return false;
-            }
         }
-        else if (this->type() < other.type()) return true;  // TreeWidgetFolders go before TreeWidgetFiles
+        else if (other.type() == 1001) return true;  // TreeWidgetFolders go before TreeWidgetFiles
         else return false;
         break;
 
     case 3: // sort by compression ratio
+        // Testing
         if (this->type() == other.type() ) {
-            if ( this->type() == 1001 ) { // both this and other are TreeWidgetFolders
-                if ( this->text(0) < other.text(0) ) return true;    // just sort them alphabetically by name
-                else return false;
-            }
-            else {  // both this and other are TreeWidgetFiles
-                TreeWidgetFile* twfile = (TreeWidgetFile*)(&other);
-                if ( this->file_ptr->uncompressed_size/this->file_ptr->compressed_size < twfile->file_ptr->uncompressed_size / twfile->file_ptr->compressed_size )
-                    return true;
-                else return false;
-            }
+            // both this and other are TreeWidgetFiles
+            TreeWidgetFile* twfile = (TreeWidgetFile*)(&other);
+            if ( (double)this->file_ptr->uncompressed_size/(double)this->file_ptr->compressed_size < (double)twfile->file_ptr->uncompressed_size / (double)twfile->file_ptr->compressed_size ) return true;
+            else return false;
         }
         else if (this->type() < other.type()) return true;  // TreeWidgetFolders go before TreeWidgetFiles
         else return false;
@@ -483,7 +470,7 @@ bool TreeWidgetFolder::operator<(const QTreeWidgetItem &other)const {
     Qt::SortOrder order = this->treeWidget()->header()->sortIndicatorOrder();
 
     if (order == Qt::AscendingOrder and other.type() == 1002) return true; // folders always go before files
-    if (order == Qt::AscendingOrder and other.type() == 1002) return false; // folders always go before files
+    if (order == Qt::DescendingOrder and other.type() == 1002) return false; // folders always go before files
 
 
     int column = treeWidget()->sortColumn();
@@ -515,6 +502,7 @@ bool TreeWidgetFolder::operator<(const QTreeWidgetItem &other)const {
         break;
 
     case 3: // sort by compression ratio
+
         if (this->type() == other.type() ) {// both this and other are TreeWidgetFolders
 
             if ( this->text(0) < other.text(0) ) return true;    // just sort them alphabetically by name
