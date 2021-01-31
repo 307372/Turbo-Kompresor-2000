@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 
+
 class Config
 {
 public:
@@ -30,7 +31,6 @@ private:
     std::filesystem::path extraction_path;
     bool filesize_scaling;
     bool dark_mode;
-
 };
 
 #endif // CONFIG_H

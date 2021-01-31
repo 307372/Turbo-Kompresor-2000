@@ -1,92 +1,76 @@
 #include "archive_structures.h"
+#include <memory>
+#include <cassert>
+#include <iostream>
+#include <bitset>
+#include <utility>
+#include <cmath>
 
 uint16_t calculate_progress( float current, float whole ) { return roundf(current*100 / whole); }
 
 void processing_worker( const int task, Compression* comp, uint16_t flags, bool& aborting_var, bool* is_finished, uint16_t* progress_ptr = nullptr )
 {
     std::bitset<16> bin_flags = flags;
-    uint16_t progress_counter = 0;
-    uint16_t whole = bin_flags.count();
-    // std::cout << "worker " << comp->part_id << " size: " << comp->size << '\n' << std::flush;
     if (task == Compression::compress) {
         if (bin_flags[0] and !aborting_var) {
-            std::cout << "BWT encoding..." << std::endl;
             comp->BWT_make();
-            progress_counter++;
             if (progress_ptr != nullptr) (*progress_ptr)++;
 
         }
 
         if (bin_flags[1] and !aborting_var) {
-            std::cout << "MTF encoding..." << std::endl;
             comp->MTF_make();
-            progress_counter++;
             if (progress_ptr != nullptr) (*progress_ptr)++;
         }
 
         if (bin_flags[2] and !aborting_var) {
-            std::cout << "RLE encoding..." << std::endl;
             comp->RLE_makeV2();
-            progress_counter++;
             if (progress_ptr != nullptr) (*progress_ptr)++;
         }
 
         if (bin_flags[3] and !aborting_var) {
-            std::cout << "AC encoding..." << std::endl;
             comp->AC_make();
-            progress_counter++;
             if (progress_ptr != nullptr) (*progress_ptr)++;
         }
 
         if (bin_flags[4] and !aborting_var) {
-            std::cout << "AC2 encoding..." << std::endl;
             comp->AC2_make();
-            progress_counter++;
             if (progress_ptr != nullptr) (*progress_ptr)++;
         }
     }
     else if (task == Compression::decompress)
     {
         if ( bin_flags[4] and !aborting_var) {
-            std::cout << "AC2 decoding..." << std::endl;
             comp->AC2_reverse();
-            progress_counter++;
             if (progress_ptr != nullptr) (*progress_ptr)++;
         }
 
         if ( bin_flags[3] and !aborting_var) {
-            std::cout << "AC decoding..." << std::endl;
             comp->AC_reverse();
-            progress_counter++;
             if (progress_ptr != nullptr) (*progress_ptr)++;
         }
 
         if ( bin_flags[2] and !aborting_var) {
-            std::cout << "RLE decoding..." << std::endl;
             comp->RLE_reverseV2();
-            progress_counter++;
             if (progress_ptr != nullptr) (*progress_ptr)++;
         }
 
         if ( bin_flags[1] and !aborting_var) {
-            std::cout << "MTF decoding..." << std::endl;
             comp->MTF_reverse();
-            progress_counter++;
             if (progress_ptr != nullptr) (*progress_ptr)++;
         }
 
         if ( bin_flags[0] and !aborting_var ) {
-            std::cout << "BWT decoding..." << std::endl;
             comp->BWT_reverse();
-            progress_counter++;
             if (progress_ptr != nullptr) (*progress_ptr)++;
         }
     }
     *is_finished = true;
 }
 
-void processing_scribe( const int task, std::fstream& output, std::vector<Compression*>& comp_v, bool worker_finished[],
-                        std::vector<std::thread>& workers, uint32_t block_count, uint64_t* compressed_size,
+
+void processing_scribe( const int task, std::fstream& output, std::vector<Compression*>& comp_v,
+                        bool worker_finished[], uint32_t block_count, uint64_t* compressed_size,
                         std::string& checksum, bool& checksum_done, uint64_t original_size, bool& aborting_var, bool* successful )
 {
     assert( output.is_open() );
@@ -133,22 +117,16 @@ void processing_scribe( const int task, std::fstream& output, std::vector<Compre
             if ( checksum.length() == 10 )  // CRC-32
             {
                 new_checksum = iv.get_CRC32_from_stream(output, aborting_var);
-                std::cout << "CRC-32:\n";
             }
             else if ( checksum.length() == 40 ) // SHA-1
             {
                 new_checksum = iv.get_SHA1_from_stream(output, original_size, aborting_var);
-                std::cout << "SHA-1:\n";
             }
-            else std::cout << "Weird checksum..." << std::endl;
-            std::cout << "Checksums:\nOld: " << checksum << "\nNew: " << new_checksum << '\n';
             if (new_checksum == checksum) {
                 *successful = true;
-                std::cout << "Decompression successful!" << std::endl;
             }
             else {
                 *successful = false;
-                std::cout << "Decompression failed!" << std::endl;
             }
         }
         else *successful = true;    // if the checksum is not checked, we assume success
@@ -156,6 +134,7 @@ void processing_scribe( const int task, std::fstream& output, std::vector<Compre
     }
     if (output.is_open() and task == Compression::decompress) output.close();
 }
+
 
 bool processing_foreman( std::fstream &archive_stream, const std::string& target_path, const int task, uint16_t flags,
                          uint64_t original_size, uint64_t* compressed_size, bool& aborting_var, bool validate_integrity, uint16_t* progress_ptr )
@@ -244,11 +223,11 @@ bool processing_foreman( std::fstream &archive_stream, const std::string& target
 
     if (task == Compression::compress)
         scribe = std::thread( &processing_scribe, task, std::ref(archive_stream), std::ref(comp_v),
-                              task_finished_arr, std::ref(workers), block_count, compressed_size,
+                              task_finished_arr, block_count, compressed_size,
                               std::ref(checksum), std::ref(checksum_done), original_size, std::ref(aborting_var), &successful );
     else if (task == Compression::decompress)
         scribe = std::thread( &processing_scribe, task, std::ref(target_stream), std::ref(comp_v), task_finished_arr,
-                              std::ref(workers), block_count, compressed_size, std::ref(checksum), std::ref(checksum_done),
+                              block_count, compressed_size, std::ref(checksum), std::ref(checksum_done),
                               original_size, std::ref(aborting_var), &successful );
 
     while (lowest_free_work_ind != block_count and !aborting_var) {
@@ -268,7 +247,7 @@ bool processing_foreman( std::fstream &archive_stream, const std::string& target
                         archive_stream.read((char*)&comp_v[lowest_free_work_ind]->size, sizeof(comp_v[lowest_free_work_ind]->size));
                         comp_v[lowest_free_work_ind]->load_text(archive_stream, comp_v[lowest_free_work_ind]->size);
                     }
-                    else std::cout << "It's neither compression nor decompression?" << std::endl;
+
                     workers.emplace_back(&processing_worker,
                                          task,
                                          comp_v[lowest_free_work_ind],
@@ -315,7 +294,6 @@ bool processing_foreman( std::fstream &archive_stream, const std::string& target
         {
             checksum = std::string(40, 0x00);
             archive_stream.read((char*)checksum.data(), checksum.length());
-            // std::cout << "Read SHA-1" << checksum << std::endl;
         }
         if (bin_flags[14])  // CRC-32
         {
@@ -333,33 +311,35 @@ bool processing_foreman( std::fstream &archive_stream, const std::string& target
     for (auto & comp : comp_v) delete comp;
 
     if (aborting_var) return false;
-    // std::cout << "Successful = " << successful << std::endl;
     return successful;
 }
 
 
+// File methods below
 
-bool file::interpret_flags(std::fstream &archive_stream, const std::string& path_to_destination, bool encode, bool& aborting_var, bool validate_integrity, uint16_t* progress_ptr ) {
+bool file::process_the_file(std::fstream &archive_stream, const std::string& path_to_destination, bool encode, bool& aborting_var, bool validate_integrity, uint16_t* progress_ptr ) {
 
     bool successful = false;
     if (encode == true)
     {
-        successful = processing_foreman(archive_stream, this->path, Compression::compress, flags_value, uncompressed_size,
+        successful = processing_foreman(archive_stream, this->path, Compression::compress, flags_value, original_size,
                            &this->compressed_size, aborting_var, validate_integrity, progress_ptr );
     }
     else
     {
         archive_stream.seekg(this->data_location);
         successful = processing_foreman(archive_stream, path_to_destination + '/' + this->name, Compression::decompress, flags_value,
-                           uncompressed_size, &this->compressed_size, aborting_var, validate_integrity, progress_ptr );
+                           original_size, &this->compressed_size, aborting_var, validate_integrity, progress_ptr );
     }
     return successful;
 }
+
 
 void file::recursive_print(std::ostream &os) const {
     os << *this << '\n';
     if (sibling_ptr) sibling_ptr->recursive_print( os );
 }
+
 
 std::ostream& operator<<(std::ostream &os, const file &f)
 {
@@ -368,14 +348,15 @@ std::ostream& operator<<(std::ostream &os, const file &f)
     os << "Header starts at byte " << f.location << ", with total size of " << file::base_metadata_size + f.name_length << " bytes\n";
     os << "Compressed data of this file starts at byte " << f.data_location << "\n";
     assert(f.parent_ptr);
-    os << "Parent located at byte " << f.parent_ptr->location << ", ";//
+    os << "Parent located at byte " << f.parent_ptr->location << ", ";
     if (f.sibling_ptr) os << "Sibling located at byte " << f.sibling_ptr->location << '\n';
     else os << "there's no sibling\n";
-    os << "With compressed size of " << f.compressed_size << " bits, and uncompressed size of " << f.uncompressed_size << " bytes." << std::endl;
+    os << "With compressed size of " << f.compressed_size << " bits, and uncompressed size of " << f.original_size << " bytes." << std::endl;
     return os;
 }
 
-void file::parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_ptr<file> &shared_this ) {
+
+void file::parse( std::fstream &os, uint64_t pos, folder* parent ) {
     uint8_t buffer[8];
     os.seekg( pos );
 
@@ -416,21 +397,20 @@ void file::parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_pt
 
     // Getting size of uncompressed data of this file from the archive
     os.read( (char*)buffer, 8 );
-    this->uncompressed_size = ((uint64_t)buffer[0]) | ((uint64_t)buffer[1]<<8u) | ((uint64_t)buffer[2]<<16u) | ((uint64_t)buffer[3]<<24u) | ((uint64_t)buffer[4]<<32u) | ((uint64_t)buffer[5]<<40u) | ((uint64_t)buffer[6]<<48u) | ((uint64_t)buffer[7]<<56u);
+    this->original_size = ((uint64_t)buffer[0]) | ((uint64_t)buffer[1]<<8u) | ((uint64_t)buffer[2]<<16u) | ((uint64_t)buffer[3]<<24u) | ((uint64_t)buffer[4]<<32u) | ((uint64_t)buffer[5]<<40u) | ((uint64_t)buffer[6]<<48u) | ((uint64_t)buffer[7]<<56u);
 
 
     if (sibling_location_pos != 0) {  // if there's another file in this dir, parse it too
-        assert(sibling_location_pos < UINT32_MAX);  // temporary
         this->sibling_ptr = std::make_unique<file>();
         uint64_t backup_g = os.tellg();
-        this->sibling_ptr->parse(os, sibling_location_pos, parent, sibling_ptr);
+        this->sibling_ptr->parse(os, sibling_location_pos, parent);
         os.seekg( backup_g );
     }
 
 }
 
+
 bool file::write_to_archive( std::fstream &archive_file, bool& aborting_var, bool write_siblings, uint16_t* progress_var ) {
-    std::cout << "name of this file is: " << this->name << std::endl;
     bool successful = false;
     if (!this->alreadySaved and !aborting_var) {
         this->alreadySaved = true;
@@ -519,7 +499,7 @@ bool file::write_to_archive( std::fstream &archive_file, bool& aborting_var, boo
         bi+=8;
 
         for (uint8_t i=0; i < 8; i++)
-            buffer[bi+i] = (uncompressed_size >> (i * 8u)) & 0xFFu;
+            buffer[bi+i] = (original_size >> (i * 8u)) & 0xFFu;
         bi+=8;
 
         assert( bi == buffer_size );
@@ -532,15 +512,11 @@ bool file::write_to_archive( std::fstream &archive_file, bool& aborting_var, boo
         data_location = backup_end_of_metadata;
 
         // encoding
-        successful = interpret_flags( archive_file, "encoding has it's path in the file object", true, aborting_var, true, progress_var );
-
-        std::cout << "compressed size: " << compressed_size << std::endl;
+        successful = process_the_file( archive_file, "encoding has it's path in the file object", true, aborting_var, true, progress_var );
 
         auto backup_p = archive_file.tellp();
 
         archive_file.seekp( data_location - 24 );
-        std::cout << "current put marker: " << archive_file.tellp() << std::endl;
-        std::cout << "end of metadata   : " << backup_end_of_metadata << std::endl;
 
         auto buffer2 = new uint8_t[16];
 
@@ -559,18 +535,15 @@ bool file::write_to_archive( std::fstream &archive_file, bool& aborting_var, boo
     return successful;
 }
 
+
 bool file::unpack( const std::string& path_to_destination, std::fstream &os, bool& aborting_var, bool unpack_all, bool validate_integrity, uint16_t* progress_var )
 {
-    std::cout << "Unpacking file " << name << "..." << std::endl;
-
     uint64_t backup_g = os.tellg();
     os.seekg( this->data_location );
 
-    bool success = interpret_flags( os, path_to_destination, false, aborting_var, validate_integrity, progress_var );
+    bool success = process_the_file( os, path_to_destination, false, aborting_var, validate_integrity, progress_var );
 
     os.seekg( backup_g );
-
-    // std::cout << "File " << name << " with compressed size of " << compressed_size << " unpacked\n" << std::endl;
 
     if (sibling_ptr != nullptr and unpack_all)
     {
@@ -579,6 +552,7 @@ bool file::unpack( const std::string& path_to_destination, std::fstream &os, boo
 
     return success;
 }
+
 
 std::string file::get_compressed_filesize_str(bool scaled) {
     std::string units[5] = {"B","KB","MB","GB","TB"};
@@ -617,10 +591,11 @@ std::string file::get_compressed_filesize_str(bool scaled) {
     }
 }
 
+
 std::string file::get_uncompressed_filesize_str(bool scaled) {
     std::string units[5] = {"B","KB","MB","GB","TB"};
 
-    float filesize = this->uncompressed_size;
+    float filesize = this->original_size;
     uint16_t unit_i = 0;
     if (scaled) {
         for (uint16_t i=0; i<5; ++i) {
@@ -655,11 +630,152 @@ std::string file::get_uncompressed_filesize_str(bool scaled) {
 }
 
 
+bool file::append_to_archive( std::fstream& archive_file, bool& aborting_var, bool write_siblings, uint16_t* progress_var ) {
+    archive_file.seekp(0, std::ios_base::end);
+    return this->write_to_archive( archive_file, aborting_var, write_siblings, progress_var );
+}
+
+
+void file::get_ptrs( std::vector<file*>& files, bool get_siblings_too ) {
+    if ( !this->ptr_already_gotten ) {
+        files.emplace_back( this );
+        this->ptr_already_gotten = true;
+    }
+
+    if ( this->sibling_ptr.get() != nullptr and get_siblings_too ) this->sibling_ptr->get_ptrs( files, get_siblings_too );
+}
+
+
+void file::set_path( std::filesystem::path extraction_path, bool set_all_paths ) {
+    if ( this->ptr_already_gotten ) this->path = extraction_path;
+
+    if ( this->sibling_ptr.get() != nullptr and set_all_paths ) this->sibling_ptr->set_path( extraction_path, set_all_paths );
+}
+
+
+void file::copy_to_another_archive( std::fstream& src, std::fstream& dst, uint64_t parent_location, uint64_t previous_sibling_location, uint16_t previous_name_length )
+{
+    if (!this->ptr_already_gotten) {    // if ptr_already_gotten, don't copy this
+
+        assert(parent_location != 0);
+
+        dst.seekp(0, std::ios_base::end);
+        uint64_t dst_location = dst.tellp();
+
+        src.seekg(this->location);
+
+        if (previous_sibling_location == 0)
+        {
+            dst.seekp( parent_location + 1 + parent_ptr->name_length + 24 ); // seekp( start of child_file_location in archive file )
+            dst.write((char*)&dst_location, 8);
+
+        }
+        else
+        {
+            assert(previous_name_length != 0 and previous_name_length < 256);
+            dst.seekp( previous_sibling_location + 1 + previous_name_length + 8 ); // seekp( start of sibling_location in archive file )
+            dst.write((char*)&dst_location, 8);
+        }
+
+        dst.seekp(0, std::ios_base::end);
+
+        uint32_t buffer_size = base_metadata_size+name_length;
+        auto buffer = new uint8_t[buffer_size];
+        uint32_t bi=0; //buffer index
+
+        // (name length)
+        buffer[bi] = name_length;
+        bi++;
+
+        // (file name)
+        for (uint16_t i=0; i < name_length; i++)
+            buffer[bi+i] = name[i];
+        bi += name_length;
+
+        // (parent_ptr)
+        for (uint8_t i = 0; i < 8; i++)
+            buffer[bi + i] = (parent_location >> (i * 8u)) & 0xFFu;
+        bi += 8;
+
+        // (sibling_ptr)
+        for (uint8_t i = 0; i < 8; i++)
+            buffer[bi + i] = 0;
+        bi+=8;
+
+        // (flags)
+        for (uint8_t i=0; i < 2; i++)
+            buffer[bi+i] = ((unsigned)flags_value >> (i * 8u)) & 0xFFu;
+        bi+=2;
+
+        // (location of data)
+        for (uint8_t i=0; i < 8; i++)
+            buffer[bi+i] = ( (dst_location - this->location + this->data_location) >> (i * 8u)) & 0xFFu;    // potentially broken
+        bi+=8;
+
+        // (compressed size)
+        for (uint8_t i=0; i < 8; i++)
+            buffer[bi+i] = (compressed_size >> (i * 8u)) & 0xFFu;
+        bi+=8;
+
+        // (original size)
+        for (uint8_t i=0; i < 8; i++)
+            buffer[bi+i] = (original_size >> (i * 8u)) & 0xFFu;
+        bi+=8;
+
+
+        assert( bi == buffer_size );
+        dst.write((char*)buffer, buffer_size);
+        delete[] buffer;
+
+
+        uint64_t backup_end_of_metadata = dst.tellp(); // position in file right after the end of metadata
+        assert( backup_end_of_metadata == dst_location - this->location + this->data_location );
+
+        assert(this->data_location != 0);
+        src.seekg(this->data_location);
+
+        // copying encoded data + checksum
+
+        uint64_t total_data_size = this->compressed_size;
+        if ((this->flags_value & (1<<15))>>15) // if it's got SHA-1 appended
+        {
+            total_data_size += 40;  // length of SHA-1 in my file (bytes)
+        }
+        else if ((this->flags_value & (1<<14))>>14) // if it's got CRC-32 appended
+        {
+            total_data_size += 10;  // length of CRC-32 in my file (bytes)
+        }
+
+        uint32_t output_buffer_size = 4*8*1024;
+        auto output_buffer = new uint8_t[output_buffer_size];
+
+        while ( total_data_size > output_buffer_size )
+        {
+            src.read( (char*)output_buffer, output_buffer_size );
+            total_data_size -= output_buffer_size;
+            dst.write( (char*)output_buffer, output_buffer_size );
+        }
+
+        src.read( (char*)output_buffer, total_data_size );
+        dst.write( (char*)output_buffer, total_data_size );
+
+        delete[] output_buffer;
+
+
+        if (sibling_ptr) sibling_ptr->copy_to_another_archive(src, dst, parent_location, dst_location, this->name_length);
+    }
+    else if (sibling_ptr){
+        assert(previous_sibling_location < UINT32_MAX);
+        sibling_ptr->copy_to_another_archive(src, dst, parent_location, previous_sibling_location, previous_name_length);
+    }
+}
 
 
 // Folder methods below
 
+
 folder::folder()= default;
+
 
 folder::folder( std::unique_ptr<folder> &parent, std::string folder_name ) {
     name = std::move(folder_name);
@@ -667,11 +783,13 @@ folder::folder( std::unique_ptr<folder> &parent, std::string folder_name ) {
     parent_ptr = parent.get();
 }
 
+
 folder::folder( folder* parent, std::string folder_name ) {
     name = std::move(folder_name);
     name_length = name.length();
     parent_ptr = parent;
 }
+
 
 void folder::recursive_print(std::ostream &os) const {
     os << *this << '\n';
@@ -679,6 +797,7 @@ void folder::recursive_print(std::ostream &os) const {
     if (sibling_ptr) sibling_ptr->recursive_print( os );
     if (child_dir_ptr) child_dir_ptr->recursive_print( os );
 }
+
 
 std::ostream& operator<<(std::ostream& os, const folder& f){
     os << "Folder named: \"" << f.name << "\", len(name) = " << (uint32_t)f.name_length << '\n';
@@ -695,6 +814,7 @@ std::ostream& operator<<(std::ostream& os, const folder& f){
 
     return os;
 }
+
 
 void folder::parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_ptr<folder> &shared_this  )
 {
@@ -745,24 +865,19 @@ void folder::parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_
     if (child_file_pos_in_file != 0) {
         this->child_file_ptr = std::make_unique<file>();
         uint64_t backup_g = os.tellg();
-        this->child_file_ptr->parse(os, child_file_pos_in_file, shared_this.get(), child_file_ptr ); // Seemingly implemented
+        this->child_file_ptr->parse(os, child_file_pos_in_file, shared_this.get() ); // Seemingly implemented
         os.seekg( backup_g );
     }
 }
 
+
 void folder::append_to_archive( std::fstream& archive_file, bool& aborting_var ) {
-    // archive_file.flush();
     archive_file.seekp(0, std::ios_base::end);
     this->write_to_archive( archive_file, aborting_var );
 }
 
-bool file::append_to_archive( std::fstream& archive_file, bool& aborting_var, bool write_siblings, uint16_t* progress_var ) {
-    archive_file.seekp(0, std::ios_base::end);
-    return this->write_to_archive( archive_file, aborting_var, write_siblings, progress_var );
-}
 
-/*
-// experimental version without having root folder's name saved
+
 void folder::write_to_archive( std::fstream &archive_file, bool& aborting_var ) {
 
     if (!this->alreadySaved) {
@@ -771,16 +886,14 @@ void folder::write_to_archive( std::fstream &archive_file, bool& aborting_var ) 
 
         if (parent_ptr != nullptr) { // correcting current dir's location in model, and in file
             if ( parent_ptr->child_dir_ptr.get() == this ) {
-                // update parent's knowledge of it's firstborn's location in file
-                std::cout << " parent_ptr->child_dir_ptr.get() == this" << std::endl;
-
+                // updating parent's knowledge of it's firstborn's location in file
                 uint64_t backup_p = archive_file.tellp();
 
                 archive_file.seekp( parent_ptr->location + 1 + parent_ptr->name_length + 8 ); // seekp( start of child_dir_location in archive file )
                 auto buffer = new uint8_t[8];
 
                 for (uint8_t i=0; i < 8; i++)
-                    buffer[i] = ( location >> (i*8u)) & 0xFFu; // Potentially fixed?
+                    buffer[i] = ( location >> (i*8u)) & 0xFFu;
 
                 archive_file.write((char*)buffer, 8);
                 delete[] buffer;
@@ -797,134 +910,12 @@ void folder::write_to_archive( std::fstream &archive_file, bool& aborting_var ) 
                         break;
                 }
 
-                std::cout << name << "\t" << location << std::endl;
-
                 uint64_t backup_p = archive_file.tellp();
                 archive_file.seekp( previous_folder->location + 1 + previous_folder->name_length + 16 ); // seekp( start of sibling_location in archive file )
                 auto buffer = new uint8_t[8];
 
                 for (uint8_t i=0; i < 8; i++)
-                    buffer[i] = ( location >> (i*8u)) & 0xFFu; // Potentially fixed?
-
-                archive_file.write((char*)buffer, 8);
-                delete[] buffer;
-
-                archive_file.seekp( backup_p );
-            }
-        }
-
-        uint32_t buffer_size = base_metadata_size+name_length;
-        if (this->parent_ptr == nullptr) buffer_size = base_metadata_size;  // root folder is nameless
-
-        auto buffer = new uint8_t[buffer_size];
-        uint32_t bi=0; //buffer index
-
-        if (this->parent_ptr != nullptr) buffer[bi] = name_length;   //writing name length to file
-        else buffer[bi] = 0;
-        bi++;
-
-        if (this->parent_ptr != nullptr) {
-            for (uint16_t i=0; i < name_length; i++)    //writing name to file
-                buffer[bi+i] = name[i];
-            bi += name_length;
-        }
-
-        if (parent_ptr)
-            for (uint8_t i = 0; i < 8; i++)
-                buffer[bi + i] = (parent_ptr->location >> (i * 8u)) & 0xFFu;
-        else
-            for (uint8_t i = 0; i < 8; i++)
-                buffer[bi + i] = 0;
-        bi += 8;
-
-        if (child_dir_ptr)
-            for (uint8_t i=0; i < 8; i++)
-                buffer[bi+i] = (child_dir_ptr->location >> (i*8u)) & 0xFFu;
-        else
-            for (uint8_t i = 0; i < 8; i++)
-                buffer[bi + i] = 0;
-        bi+=8;
-
-        if (sibling_ptr) {
-            for (uint8_t i = 0; i < 8; i++)
-                buffer[bi + i] = (sibling_ptr->location >> (i * 8u)) & 0xFFu;
-            bi += 8;
-        } else {
-            for (uint8_t i = 0; i < 8; i++)
-                buffer[bi + i] = 0;
-            bi += 8;
-        }
-
-        if (child_file_ptr)
-            for (uint8_t i=0; i < 8; i++)
-                buffer[bi+i] = (child_file_ptr->location >> (i*8u)) & 0xFFu;
-        else
-            for (uint8_t i=0; i < 8; i++)
-                buffer[bi+i] = 0;
-
-
-        assert( bi+8 == buffer_size );
-
-        archive_file.write((char*)buffer, buffer_size);
-        // std::cout << "Folder " << name << " tellp() = " << archive_file.tellp() << std::endl;
-        // std::cout << "child_folder_location " << child_file_location << std::endl;
-        delete[] buffer;
-    }
-
-    if (sibling_ptr)
-        sibling_ptr->write_to_archive( archive_file, aborting_var );
-
-    if (child_file_ptr)
-        child_file_ptr->write_to_archive( archive_file, aborting_var );
-
-    if (child_dir_ptr)
-        child_dir_ptr->write_to_archive( archive_file, aborting_var );
-
-}
-*/
-
-void folder::write_to_archive( std::fstream &archive_file, bool& aborting_var ) {
-
-    if (!this->alreadySaved) {
-        this->alreadySaved = true;
-        location = archive_file.tellp();
-
-        if (parent_ptr != nullptr) { // correcting current dir's location in model, and in file
-            if ( parent_ptr->child_dir_ptr.get() == this ) {
-                // update parent's knowledge of it's firstborn's location in file
-                std::cout << " parent_ptr->child_dir_ptr.get() == this" << std::endl;
-
-                uint64_t backup_p = archive_file.tellp();
-
-                archive_file.seekp( parent_ptr->location + 1 + parent_ptr->name_length + 8 ); // seekp( start of child_dir_location in archive file )
-                auto buffer = new uint8_t[8];
-
-                for (uint8_t i=0; i < 8; i++)
-                    buffer[i] = ( location >> (i*8u)) & 0xFFu; // Potentially fixed?
-
-                archive_file.write((char*)buffer, 8);
-                delete[] buffer;
-
-                archive_file.seekp( backup_p );
-            }
-            else {
-                folder* previous_folder = parent_ptr->child_dir_ptr.get();
-                while( previous_folder->sibling_ptr != nullptr )
-                {
-                    if (this != previous_folder->sibling_ptr.get())
-                        previous_folder = previous_folder->sibling_ptr.get();
-                    else
-                        break;
-                }
-
-                std::cout << name << "\t" << location << std::endl;
-
-                uint64_t backup_p = archive_file.tellp();
-                archive_file.seekp( previous_folder->location + 1 + previous_folder->name_length + 16 ); // seekp( start of sibling_location in archive file )
-                auto buffer = new uint8_t[8];
-
-                for (uint8_t i=0; i < 8; i++)
-                    buffer[i] = ( location >> (i*8u)) & 0xFFu; // Potentially fixed?
+                    buffer[i] = ( location >> (i*8u)) & 0xFFu;
 
                 archive_file.write((char*)buffer, 8);
                 delete[] buffer;
@@ -977,12 +968,8 @@ void folder::write_to_archive( std::fstream &archive_file, bool& aborting_var ) 
             for (uint8_t i=0; i < 8; i++)
                 buffer[bi+i] = 0;
 
-
         assert( bi+8 == buffer_size );
-
         archive_file.write((char*)buffer, buffer_size);
-        // std::cout << "Folder " << name << " tellp() = " << archive_file.tellp() << std::endl;
-        // std::cout << "child_folder_location " << child_file_location << std::endl;
         delete[] buffer;
     }
 
@@ -997,17 +984,16 @@ void folder::write_to_archive( std::fstream &archive_file, bool& aborting_var ) 
 
 }
 
+
 void folder::unpack( const std::filesystem::path& target_path, std::fstream &os, bool& aborting_var, bool unpack_all ) const
 {
     std::string temp_name;
     if (this->parent_ptr == nullptr) temp_name = std::filesystem::path(this->name).stem();
     else temp_name = this->name;
-    std::cout << "Creating folder " << temp_name << "..." << std::endl;
+
     std::filesystem::path path_with_this_folder( target_path.string() + '/' + temp_name );
     if ( !std::filesystem::exists(path_with_this_folder) )
         std::filesystem::create_directories( path_with_this_folder );
-
-    std::cout << "Folder " << temp_name << " created\n" << std::endl;
 
     if (unpack_all) {
         if( sibling_ptr != nullptr )
@@ -1020,6 +1006,7 @@ void folder::unpack( const std::filesystem::path& target_path, std::fstream &os,
 
 }
 
+
 void folder::get_ptrs( std::vector<folder*>& folders, std::vector<file*>& files ) {
     if ( !this->ptr_already_gotten ) {
         folders.emplace_back( this );
@@ -1029,15 +1016,6 @@ void folder::get_ptrs( std::vector<folder*>& folders, std::vector<file*>& files 
     if (this->child_dir_ptr.get() != nullptr) this->child_dir_ptr->get_ptrs( folders, files );
     if (this->child_file_ptr.get() != nullptr) this->child_file_ptr->get_ptrs( files, true );
 
-}
-
-void file::get_ptrs( std::vector<file*>& files, bool get_siblings_too ) {
-    if ( !this->ptr_already_gotten ) {
-        files.emplace_back( this );
-        this->ptr_already_gotten = true;
-    }
-
-    if ( this->sibling_ptr.get() != nullptr and get_siblings_too ) this->sibling_ptr->get_ptrs( files, get_siblings_too );
 }
 
 
@@ -1059,13 +1037,8 @@ void folder::set_path( std::filesystem::path extraction_path, bool set_all_paths
     if (this->child_file_ptr.get() != nullptr and set_all_paths) this->child_file_ptr->set_path( folder_path, set_all_paths );
 }
 
-void file::set_path( std::filesystem::path extraction_path, bool set_all_paths ) {
-    if ( this->ptr_already_gotten ) this->path = extraction_path;
 
-    if ( this->sibling_ptr.get() != nullptr and set_all_paths ) this->sibling_ptr->set_path( extraction_path, set_all_paths );
-}
-
-void folder::copy_to_another_file( std::fstream& src, std::fstream& dst, uint64_t parent_location, uint64_t previous_sibling_location )
+void folder::copy_to_another_archive( std::fstream& src, std::fstream& dst, uint64_t parent_location, uint64_t previous_sibling_location )
 {
     if (!this->ptr_already_gotten) {    // if ptr_already_gotten, don't copy this
         src.seekg(this->location);
@@ -1077,7 +1050,6 @@ void folder::copy_to_another_file( std::fstream& src, std::fstream& dst, uint64_
                 assert(previous_sibling_location == 0);
 
                 // update parent's knowledge of it's firstborn's location in file
-                std::cout << " parent_ptr->child_dir_ptr.get() == this" << std::endl;
 
                 uint64_t backup_p = dst.tellp();
 
@@ -1104,14 +1076,12 @@ void folder::copy_to_another_file( std::fstream& src, std::fstream& dst, uint64_
                         break;
                 }
 
-                std::cout << name << "\t" << location << std::endl;
-
                 uint64_t backup_p = dst.tellp();
                 dst.seekp( previous_sibling_location + 1 + previous_folder->name_length + 16 ); // seekp( start of sibling_location in archive file )
                 auto buffer = new uint8_t[8];
 
                 for (uint8_t i=0; i < 8; i++)
-                    buffer[i] = ( dst_location >> (i*8u)) & 0xFFu; // Potentially fixed?
+                    buffer[i] = ( dst_location >> (i*8u)) & 0xFFu;
 
                 dst.write((char*)buffer, 8);
                 delete[] buffer;
@@ -1159,194 +1129,14 @@ void folder::copy_to_another_file( std::fstream& src, std::fstream& dst, uint64_
         assert( bi == buffer_size );
 
         dst.write((char*)buffer, buffer_size);
-        // std::cout << "Folder " << name << " tellp() = " << archive_file.tellp() << std::endl;
-        // std::cout << "child_folder_location " << child_file_location << std::endl;
         delete[] buffer;
 
-        if (sibling_ptr) sibling_ptr->copy_to_another_file(src, dst, parent_location, dst_location);
-        if (child_file_ptr) child_file_ptr->copy_to_another_file(src, dst, dst_location, 0, 0);
-        if (child_dir_ptr) child_dir_ptr->copy_to_another_file(src, dst, dst_location, 0);
+        if (sibling_ptr) sibling_ptr->copy_to_another_archive(src, dst, parent_location, dst_location);
+        if (child_file_ptr) child_file_ptr->copy_to_another_archive(src, dst, dst_location, 0, 0);
+        if (child_dir_ptr) child_dir_ptr->copy_to_another_archive(src, dst, dst_location, 0);
     }
     else
     {
-        assert(previous_sibling_location < UINT32_MAX and parent_location < UINT32_MAX);  // temporary
-        if (sibling_ptr) sibling_ptr->copy_to_another_file(src, dst, parent_location, previous_sibling_location);
-    }
-
-
-}
-
-void file::copy_to_another_file( std::fstream& src, std::fstream& dst, uint64_t parent_location, uint64_t previous_sibling_location, uint16_t previous_name_length )
-{
-    if (!this->ptr_already_gotten) {    // if ptr_already_gotten, don't copy this
-
-        assert(parent_location != 0);
-
-        dst.seekp(0, std::ios_base::end);
-        uint64_t dst_location = dst.tellp();
-
-        src.seekg(this->location);
-
-        if (previous_sibling_location == 0)
-        {
-            dst.seekp( parent_location + 1 + parent_ptr->name_length + 24 ); // seekp( start of child_file_location in archive file )
-            dst.write((char*)&dst_location, 8);
-
-        }
-        else
-        {
-            assert(previous_name_length != 0 and previous_name_length < 256);
-            dst.seekp( previous_sibling_location + 1 + previous_name_length + 8 ); // seekp( start of sibling_location in archive file )
-            dst.write((char*)&dst_location, 8);
-        }
-
-        dst.seekp(0, std::ios_base::end);
-
-        /*
-        if (parent_ptr != nullptr) {
-            assert(parent_location != 0);
-            // correcting current file's location in model, and in the file
-            if ( parent_ptr->child_file_ptr.get() == this or previous_sibling_location == 0 ) {
-
-
-                dst.seekp( parent_location + 1 + parent_ptr->name_length + 24 ); // seekp( start of child_file_location in archive file )
-                auto buffer = new uint8_t[8];
-
-                for (uint8_t i=0; i < 8; i++)
-                    buffer[i] = ( dst_location >> (i*8u)) & 0xFFu;
-
-                dst.write((char*)buffer, 8);
-                delete[] buffer;
-
-
-
-            }*/
-        /*
-            else {
-                file* file_ptr = parent_ptr->child_file_ptr.get(); // location of previous file in the same dir
-                while( file_ptr->sibling_ptr != nullptr )
-                {
-                    if (this != file_ptr->sibling_ptr.get())
-                        file_ptr = file_ptr->sibling_ptr.get();
-                    else
-                        break;
-                }
-
-
-                dst.seekp( previous_sibling_location + 1 + file_ptr->name_length + 8 ); // seekp( start of sibling_location in archive file )
-                auto buffer = new uint8_t[8];
-
-                for (uint8_t i=0; i < 8; i++)
-                    buffer[i] = ( dst_location >> (i*8u)) & 0xFFu;
-
-                dst.write((char*)buffer, 8);
-                delete[] buffer;
-            }
-        }
-        */
-
-
-
-        uint32_t buffer_size = base_metadata_size+name_length;
-        auto buffer = new uint8_t[buffer_size];
-        uint32_t bi=0; //buffer index
-
-        // (name length)
-        buffer[bi] = name_length;
-        bi++;
-
-        // (file name)
-        for (uint16_t i=0; i < name_length; i++)
-            buffer[bi+i] = name[i];
-        bi += name_length;
-
-        // (parent_ptr)
-        for (uint8_t i = 0; i < 8; i++)
-            buffer[bi + i] = (parent_location >> (i * 8u)) & 0xFFu;
-        bi += 8;
-
-        // (sibling_ptr)
-        for (uint8_t i = 0; i < 8; i++)
-            buffer[bi + i] = 0;
-        bi+=8;
-
-        // (flags)
-        for (uint8_t i=0; i < 2; i++)
-            buffer[bi+i] = ((unsigned)flags_value >> (i * 8u)) & 0xFFu;
-        bi+=2;
-
-        // (location of data)
-        for (uint8_t i=0; i < 8; i++)
-            buffer[bi+i] = ( (dst_location - this->location + this->data_location) >> (i * 8u)) & 0xFFu;    // potentially broken
-        bi+=8;
-
-        // (compressed size)
-        for (uint8_t i=0; i < 8; i++)
-            buffer[bi+i] = (compressed_size >> (i * 8u)) & 0xFFu;
-        bi+=8;
-
-        // (original size)
-        for (uint8_t i=0; i < 8; i++)
-            buffer[bi+i] = (uncompressed_size >> (i * 8u)) & 0xFFu;
-        bi+=8;
-
-
-        assert( bi == buffer_size );
-        dst.write((char*)buffer, buffer_size);
-        delete[] buffer;
-
-
-        uint64_t backup_end_of_metadata = dst.tellp(); // position in file right after the end of metadata
-        std::cout << "data location calculation: " << dst_location - this->location + this->data_location << std::endl;
-        assert( backup_end_of_metadata == dst_location - this->location + this->data_location );
-
-        assert(this->data_location != 0);
-        src.seekg(this->data_location);
-
-        // copying encoded data + checksum
-
-        uint64_t total_data_size = this->compressed_size;
-        if ((this->flags_value & (1<<15))>>15) // if it's got SHA-1 appended
-        {
-            std::cout << "SHA-1 accounted for" << std::endl;
-            total_data_size += 40;  // length of SHA-1 in my file (bytes)
-        }
-        else if ((this->flags_value & (1<<14))>>14) // if it's got CRC-32 appended
-        {
-            // std::cout << "CRC-32 accounted for" << std::endl;
-            total_data_size += 10;  // length of CRC-32 in my file (bytes)
-        }
-
-        uint32_t output_buffer_size = 4*8*1024;
-        auto output_buffer = new uint8_t[output_buffer_size];
-
-        while ( total_data_size > output_buffer_size )
-        {
-            src.read( (char*)output_buffer, output_buffer_size );
-            total_data_size -= output_buffer_size;
-            dst.write( (char*)output_buffer, output_buffer_size );
-        }
-
-        src.read( (char*)output_buffer, total_data_size );
-        dst.write( (char*)output_buffer, total_data_size );
-
-        delete[] output_buffer;
-
-
-        if (sibling_ptr) sibling_ptr->copy_to_another_file(src, dst, parent_location, dst_location, this->name_length);
-    }
-    else if (sibling_ptr){
-        assert(previous_sibling_location < UINT32_MAX);
-        sibling_ptr->copy_to_another_file(src, dst, parent_location, previous_sibling_location, previous_name_length);
+        if (sibling_ptr) sibling_ptr->copy_to_another_archive(src, dst, parent_location, previous_sibling_location);
     }
 }
-
-
-
-
-
-
-
-
-
-

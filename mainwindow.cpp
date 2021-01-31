@@ -3,6 +3,7 @@
 #include "settingsdialog.h"
 
 #include <QFile>
+#include <cassert>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -18,8 +19,14 @@ MainWindow::MainWindow(QWidget *parent)
     config_ptr = new Config();
 
     QAction *settingsAction = ui->menubar->addAction("Settings");
-    connect(settingsAction, &QAction::triggered, this, &MainWindow::openSettingsDialog);
-
+    connect( settingsAction,            &QAction::triggered,    this, &MainWindow::open_settings_dialog );
+    connect( ui->buttonRemoveSelected,  &QPushButton::clicked,  this, &MainWindow::remove_selected_clicked );
+    connect( ui->actionNew_archive,     &QAction::triggered,    this, &MainWindow::new_archive_triggered );
+    connect( ui->actionOpen_archive,    &QAction::triggered,    this, &MainWindow::open_archive_triggered );
+    connect( ui->buttonExtractSelected, &QPushButton::clicked,  this, &MainWindow::extract_selected_clicked );
+    connect( ui->buttonExtractAll,      &QPushButton::clicked,  this, &MainWindow::extract_all_clicked );
+    connect( ui->buttonAddNewFile,      &QPushButton::clicked,  this, &MainWindow::add_new_file_clicked );
+    connect( ui->buttonAddNewFolder,    &QPushButton::clicked,  this, &MainWindow::add_new_folder_clicked );
 
     // loading stylesheets (if they exist)
     QFile style_file_dark(":/dark.qss");
@@ -28,7 +35,6 @@ MainWindow::MainWindow(QWidget *parent)
         QTextStream stream_dark(&style_file_dark);
         style_dark = stream_dark.readAll();
     }
-    else std::cout << "Dark mode file does not exist!" << std::endl;
 
     QFile style_file_light(":/light.qss");
     if (style_file_light.exists()) {
@@ -36,11 +42,11 @@ MainWindow::MainWindow(QWidget *parent)
         QTextStream stream_light(&style_file_light);
         style_light = stream_light.readAll();
     }
-    else std::cout << "Light mode file does not exist!" << std::endl;
 
     if (config_ptr->get_dark_mode()) this->setStyleSheet(style_dark);
     else this->setStyleSheet(style_light);
 }
+
 
 MainWindow::~MainWindow()
 {
@@ -49,30 +55,32 @@ MainWindow::~MainWindow()
     if (config_ptr  != nullptr) delete config_ptr;
 }
 
-void MainWindow::newArchiveModel() {
+
+void MainWindow::new_archive_model() {
     ui->archiveWidget->clear();
     if (archive_ptr != nullptr) delete archive_ptr;
     archive_ptr = new archive();
 }
 
 
-
 void MainWindow::load_archive( std::string path_to_archive ) {
-    this->newArchiveModel();
+    this->new_archive_model();
     this->current_archive_path = path_to_archive;
     this->archive_ptr->load( path_to_archive );
 
-    ui->archiveWidget->addTopLevelItem( new TreeWidgetFolder( ui->archiveWidget->invisibleRootItem(), archive_ptr->archive_dir.get(), archive_ptr, config_ptr->get_filesize_scaling() ) );
+    ui->archiveWidget->addTopLevelItem( new TreeWidgetFolder( ui->archiveWidget->invisibleRootItem(), archive_ptr->root_folder.get(), archive_ptr, config_ptr->get_filesize_scaling() ) );
     ui->archiveWidget->topLevelItem(0)->setText(0, QString::fromStdString(std::filesystem::path(path_to_archive).filename()));
     this->ui->archiveWidget->expandAll();
 
     this->ui->archiveWidget->sortByColumn(0, Qt::SortOrder::AscendingOrder);
 }
 
+
 void MainWindow::reload_archive() {
-    this->newArchiveModel();
+    this->new_archive_model();
     this->load_archive( current_archive_path );
 }
+
 
 void MainWindow::write_file_to_current_archive( file* file_ptr, bool& aborting_var ) {
 
@@ -80,10 +88,12 @@ void MainWindow::write_file_to_current_archive( file* file_ptr, bool& aborting_v
 
 }
 
+
 void MainWindow::write_folder_to_current_archive( folder* folder_model, bool& aborting_var ) {
     folder_model->append_to_archive( this->archive_ptr->archive_file, aborting_var );
     this->reload_archive();
 }
+
 
 TreeWidgetFolder::TreeWidgetFolder(QTreeWidgetItem *parent, folder* ptr_to_folder, archive* ptr_to_archive, bool filesize_scaled  )
 : QTreeWidgetItem(parent, QStringList() << ptr_to_folder->name.c_str(), QTreeWidgetItem::UserType+1)
@@ -97,7 +107,6 @@ TreeWidgetFolder::TreeWidgetFolder(QTreeWidgetItem *parent, folder* ptr_to_folde
     if (ptr_to_folder->child_file_ptr) this->addChild( new TreeWidgetFile( this, ptr_to_folder->child_file_ptr.get(), ptr_to_archive, filesize_scaled ) );
 
 }
-
 
 
 TreeWidgetFolder::TreeWidgetFolder(TreeWidgetFolder *parent, folder* ptr_to_folder, archive* ptr_to_archive, bool filesize_scaled  )
@@ -126,6 +135,7 @@ void TreeWidgetFolder::unpack( std::string path_for_extraction, bool& aborting_v
     }
 }
 
+
 void TreeWidgetFile::unpack( std::string path_for_extraction, bool& aborting_var ) {
     std::filesystem::path extraction_path( path_for_extraction );
     if ( !extraction_path.empty() ) {   // check if something is at least written
@@ -137,8 +147,9 @@ void TreeWidgetFile::unpack( std::string path_for_extraction, bool& aborting_var
     }
 }
 
+
 TreeWidgetFile::TreeWidgetFile(TreeWidgetFolder *parent, file* ptr_to_file, archive* ptr_to_archive, bool filesize_scaled)
-: QTreeWidgetItem(parent, QStringList() << ptr_to_file->name.c_str() << QString::fromStdString( ptr_to_file->get_uncompressed_filesize_str(filesize_scaled)) << QString::fromStdString(ptr_to_file->get_compressed_filesize_str(filesize_scaled)) << QString::number((float)ptr_to_file->uncompressed_size/(float)(ptr_to_file->compressed_size)), QTreeWidgetItem::UserType+2 )
+: QTreeWidgetItem(parent, QStringList() << ptr_to_file->name.c_str() << QString::fromStdString( ptr_to_file->get_uncompressed_filesize_str(filesize_scaled)) << QString::fromStdString(ptr_to_file->get_compressed_filesize_str(filesize_scaled)) << QString::number((float)ptr_to_file->original_size/(float)(ptr_to_file->compressed_size)), QTreeWidgetItem::UserType+2 )
 {
     this->setTextAlignment(1, Qt::AlignRight);
     this->setTextAlignment(2, Qt::AlignRight);
@@ -151,16 +162,13 @@ TreeWidgetFile::TreeWidgetFile(TreeWidgetFolder *parent, file* ptr_to_file, arch
 
 
 
-
-
-
-void MainWindow::on_actionNew_archive_triggered()
+void MainWindow::new_archive_triggered()
 {
-    createEmptyArchive();
+    create_empty_archive();
 }
 
 
-void MainWindow::on_actionOpen_archive_triggered()
+void MainWindow::open_archive_triggered()
 {
     QString filter = "Archive (*.tk2k) ;; All Files (*.*)" ;
     QString file_path = QFileDialog::getOpenFileName(this, "Open an archive", QDir::homePath() + "/Desktop", filter );
@@ -169,7 +177,8 @@ void MainWindow::on_actionOpen_archive_triggered()
     }
 }
 
-void MainWindow::on_buttonExtractSelected_clicked()
+
+void MainWindow::extract_selected_clicked()
 {
 
     auto selected = ui->archiveWidget->selectedItems();
@@ -179,7 +188,7 @@ void MainWindow::on_buttonExtractSelected_clicked()
         std::vector<QTreeWidgetItem*> extraction_targets;
         for (int32_t i=0; i < selected.size(); ++i) extraction_targets.push_back( selected[i] );
 
-        MyDialog md( extraction_targets,  this);
+        ProcessingDialog md( extraction_targets,  this);
         md.prepare_GUI_decompression();
         md.exec();
 
@@ -187,7 +196,8 @@ void MainWindow::on_buttonExtractSelected_clicked()
     }
 }
 
-void MainWindow::on_buttonExtractAll_clicked()
+
+void MainWindow::extract_all_clicked()
 {
     // if there's no open archive, extract nothing
     if (ui->archiveWidget->invisibleRootItem()->childCount() == 0) return;
@@ -195,7 +205,7 @@ void MainWindow::on_buttonExtractAll_clicked()
     std::vector<QTreeWidgetItem*> extraction_targets;
     extraction_targets.push_back(ui->archiveWidget->topLevelItem(0));
 
-    MyDialog md( extraction_targets,  this);
+    ProcessingDialog md( extraction_targets,  this);
     md.prepare_GUI_decompression();
     md.exec();
 
@@ -203,15 +213,12 @@ void MainWindow::on_buttonExtractAll_clicked()
 }
 
 
-
-
-
-void MainWindow::on_buttonAddNewFile_clicked()
+void MainWindow::add_new_file_clicked()
 {
 
     if (!ui->archiveWidget->selectedItems().empty()) {
         auto itm = ui->archiveWidget->selectedItems()[0];
-        std::cout << itm->type() << std::endl;
+
         if (itm->type() == 1001) {  // TreeWidgetFolder
             TreeWidgetFolder* twfolder = static_cast<TreeWidgetFolder*>(itm);
             QFileDialog dialog( this, "Select files which you want to add", QDir::homePath() + "/Desktop" );
@@ -219,7 +226,7 @@ void MainWindow::on_buttonAddNewFile_clicked()
             QStringList file_path_list = dialog.getOpenFileNames(this, "Select files which you want to add" );
             if (!file_path_list.isEmpty()) {
 
-                MyDialog md(twfolder, file_path_list, this);
+                ProcessingDialog md(twfolder, file_path_list, this);
                 md.prepare_GUI_compression();
                 md.exec();
 
@@ -233,7 +240,7 @@ void MainWindow::on_buttonAddNewFile_clicked()
             QStringList file_path_list = dialog.getOpenFileNames(this, "Select files which you want to add" );
             if (!file_path_list.isEmpty()) {
 
-                MyDialog md(twfile, file_path_list, this);
+                ProcessingDialog md(twfile, file_path_list, this);
                 md.prepare_GUI_compression();
                 md.exec();
 
@@ -243,7 +250,8 @@ void MainWindow::on_buttonAddNewFile_clicked()
     }
 }
 
-void MainWindow::on_buttonRemoveSelected_clicked()
+
+void MainWindow::remove_selected_clicked()
 {
 
     if (!ui->archiveWidget->selectedItems().empty()) {
@@ -263,7 +271,7 @@ void MainWindow::on_buttonRemoveSelected_clicked()
                 if (reply == QMessageBox::Yes) {
                     this->archive_ptr->archive_file.close();
                     std::filesystem::remove(current_archive_path);
-                    this->newArchiveModel();
+                    this->new_archive_model();
                 }
                 else if (reply == QMessageBox::No) {
                     return;
@@ -287,7 +295,6 @@ void MainWindow::on_buttonRemoveSelected_clicked()
                     files.emplace_back( reinterpret_cast<TreeWidgetFile*>(targets[i])->file_ptr );
                     files[files.size()-1]->ptr_already_gotten = true;
                 }
-                else assert(false); // this should never happen
             }
 
             for (auto single_folder : folders) single_folder->get_ptrs( folders, files );
@@ -301,11 +308,11 @@ void MainWindow::on_buttonRemoveSelected_clicked()
 
             assert(archive_ptr->archive_file.is_open());
 
-            this->archive_ptr->archive_dir->copy_to_another_file(this->archive_ptr->archive_file, dst, 0, 0);
+            this->archive_ptr->root_folder->copy_to_another_archive(this->archive_ptr->archive_file, dst, 0, 0);
 
             if (this->archive_ptr->archive_file.is_open()) this->archive_ptr->archive_file.close();
             if (dst.is_open()) dst.close();
-            // std::filesystem::copy_file(parent_mw->archive_ptr->load_path, temp_path, std::filesystem::copy_options::overwrite_existing);
+
             std::filesystem::copy_file(temp_path, archive_ptr->load_path, std::filesystem::copy_options::overwrite_existing);
             std::filesystem::remove(temp_path);
 
@@ -315,11 +322,8 @@ void MainWindow::on_buttonRemoveSelected_clicked()
 }
 
 
-
-
-
-void MainWindow::createEmptyArchive() {
-    newArchiveModel();
+void MainWindow::create_empty_archive() {
+    new_archive_model();
 
     QString filter = "Archive (*.tk2k) ;; All Files (*.*)" ;
     QString Qfile_path = QFileDialog::getSaveFileName(this, "Select where you want your archive to be", QDir::homePath() + "/Desktop", filter );
@@ -341,7 +345,8 @@ void MainWindow::createEmptyArchive() {
     }
 }
 
-void MainWindow::on_buttonAddNewFolder_clicked()
+
+void MainWindow::add_new_folder_clicked()
 {
 
 
@@ -349,7 +354,6 @@ void MainWindow::on_buttonAddNewFolder_clicked()
 
     if (!ui->archiveWidget->selectedItems().empty()) {
         auto itm = ui->archiveWidget->selectedItems()[0];
-        std::cout << itm->type() << std::endl;
 
         bool not_canceled = false;
 
@@ -389,7 +393,8 @@ void MainWindow::on_buttonAddNewFolder_clicked()
     }
 }
 
-void MainWindow::openSettingsDialog()
+
+void MainWindow::open_settings_dialog()
 {
     SettingsDialog* sd = new SettingsDialog(this, this);
     connect(sd, &SettingsDialog::set_mainwindow_stylesheet, this, &MainWindow::setStyleSheet);
@@ -427,7 +432,7 @@ bool TreeWidgetFile::operator<(const QTreeWidgetItem &other)const {
             }
             else {  // both this and other are TreeWidgetFiles
                 TreeWidgetFile* twfile = (TreeWidgetFile*)(&other);
-                if ( this->file_ptr->uncompressed_size < twfile->file_ptr->uncompressed_size ) return true;
+                if ( this->file_ptr->original_size < twfile->file_ptr->original_size ) return true;
                 else return false;
             }
         }
@@ -451,7 +456,7 @@ bool TreeWidgetFile::operator<(const QTreeWidgetItem &other)const {
         if (this->type() == other.type() ) {
             // both this and other are TreeWidgetFiles
             TreeWidgetFile* twfile = (TreeWidgetFile*)(&other);
-            if ( (double)this->file_ptr->uncompressed_size/(double)this->file_ptr->compressed_size < (double)twfile->file_ptr->uncompressed_size / (double)twfile->file_ptr->compressed_size ) return true;
+            if ( (double)this->file_ptr->original_size/(double)this->file_ptr->compressed_size < (double)twfile->file_ptr->original_size / (double)twfile->file_ptr->compressed_size ) return true;
             else return false;
         }
         else if (this->type() < other.type()) return true;  // TreeWidgetFolders go before TreeWidgetFiles
@@ -462,6 +467,7 @@ bool TreeWidgetFile::operator<(const QTreeWidgetItem &other)const {
         throw NotImplementedException("Something went terribly wrong while sorting.");
     }
 }
+
 
 bool TreeWidgetFolder::operator<(const QTreeWidgetItem &other)const {
     //1001 - TreeWidgetFolder
@@ -517,32 +523,3 @@ bool TreeWidgetFolder::operator<(const QTreeWidgetItem &other)const {
         throw NotImplementedException("Something went terribly wrong while sorting.");
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

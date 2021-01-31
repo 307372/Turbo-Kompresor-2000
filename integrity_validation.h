@@ -1,10 +1,7 @@
-//
-// Created by pc on 03.11.2020.
-//
-
 #ifndef TURBO_KOMPRESOR_2000_INTEGRITY_VALIDATION_H
 #define TURBO_KOMPRESOR_2000_INTEGRITY_VALIDATION_H
 #include <string>
+
 
 class integrity_validation {
     std::string SHA1;
@@ -21,6 +18,5 @@ private:
     const uint64_t polynomial = 0x4C11DB7;
     uint32_t CRC32_lookup_table[256];
 };
-
 
 #endif //TURBO_KOMPRESOR_2000_INTEGRITY_VALIDATION_H

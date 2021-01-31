@@ -4,9 +4,12 @@
 #include <QDialog>
 #include "config.h"
 #include "mainwindow.h"
+
+
 namespace Ui {
 class SettingsDialog;
 }
+
 
 class SettingsDialog : public QDialog
 {

@@ -1,5 +1,5 @@
-#ifndef MYDIALOG_H
-#define MYDIALOG_H
+#ifndef PROCESSINGDIALOG_H
+#define PROCESSINGDIALOG_H
 #include <iostream>
 #include <bitset>
 
@@ -9,32 +9,33 @@
 #include <QtConcurrent>
 #include <QTimer>
 
+
 class MainWindow;
 class TreeWidgetFolder;
 class TreeWidgetFile;
-class thread_compression;
+class compression_object;
 class decompression_object;
+
 
 #include "mainwindow.h"
 
+
 namespace Ui {
-class MyDialog;
+class ProcessingDialog;
 }
 
-class MyDialog : public QDialog
+class ProcessingDialog : public QDialog
 {
     Q_OBJECT
 
 public:
-    explicit MyDialog( QWidget *parent = nullptr );
-    explicit MyDialog( TreeWidgetFolder* twfolder, QStringList file_path_list, QWidget *parent = nullptr );
-    explicit MyDialog( TreeWidgetFile* twfile, QStringList file_path_list, QWidget *parent = nullptr );
-    explicit MyDialog( std::vector<QTreeWidgetItem*> extraction_targets, QWidget *parent = nullptr );
-
-    ~MyDialog();
+    explicit ProcessingDialog( QWidget *parent = nullptr );
+    explicit ProcessingDialog( TreeWidgetFolder* twfolder, QStringList file_path_list, QWidget *parent = nullptr );
+    explicit ProcessingDialog( TreeWidgetFile* twfile, QStringList file_path_list, QWidget *parent = nullptr );
+    explicit ProcessingDialog( std::vector<QTreeWidgetItem*> extraction_targets, QWidget *parent = nullptr );
+    ~ProcessingDialog();
 
     uint16_t progress_step_value = 0;
-
 
     void set_progress_file_value(uint16_t value);
     void closeEvent(QCloseEvent *event);
@@ -44,7 +45,6 @@ public:
 
 signals:
     void abort_processing();
-
 
 private slots:
     void on_buttonCancel_clicked();
@@ -57,10 +57,9 @@ private slots:
 
     void onProgressNextStep(double value);
 
-    void on_processing_finished(bool successful);
+    void slot_processing_finished(bool successful);
 
     void on_buttonFinish_clicked();
-
 
     void onTimerTimeout();
 
@@ -73,11 +72,11 @@ private slots:
     void displayFailedFiles(QStringList failed_paths);
 
 private:
-    Ui::MyDialog *ui;
+    Ui::ProcessingDialog *ui;
     MainWindow* parent_mw = nullptr;
     TreeWidgetFolder* twfolder_ptr = nullptr;
     TreeWidgetFile* twfile_ptr = nullptr;
-    thread_compression* th_compression = nullptr;
+    compression_object* th_compression = nullptr;
     QThread* my_thread = nullptr;
     QTimer* timer_elapsed_time = nullptr;
     decompression_object* th_decompression = nullptr;
@@ -96,20 +95,15 @@ private:
 };
 
 
-
-
 // ===== HELPER OBJECT STARTS NOW =====
 
 
-
-
-
-class thread_compression : public QObject
+class compression_object : public QObject
 {
     Q_OBJECT
 public:
-    explicit thread_compression( std::vector<file*> file_list, uint16_t* progress_ptr, uint32_t* progressBarStepMax, std::filesystem::path tmp_path );
-    ~thread_compression();
+    explicit compression_object( std::vector<file*> file_list, uint16_t* progress_ptr, uint32_t* progressBarStepMax, std::filesystem::path tmp_path );
+    ~compression_object();
     void start();
 
     std::vector<file*> file_list;
@@ -118,8 +112,6 @@ public:
     bool aborting_variable;
     uint16_t* progress_step;
     uint32_t* progressBarStepMax = nullptr;
-
-
 
 signals:
     void ProgressNextFile(double value);
@@ -131,9 +123,7 @@ signals:
 public slots:
     void start_processing();
     void abort_processing();
-
 };
-
 
 
 
@@ -151,8 +141,6 @@ public:
     uint16_t* progress_step;
     uint32_t* progressBarStepMax = nullptr;
 
-
-
 signals:
     void ProgressNextFile(double value);
     void ProgressNextStep(double value);
@@ -168,16 +156,4 @@ private:
     bool validate_integrity;
 };
 
-
-
-
-
-
-
-
-
-
-
-
-
-#endif // MYDIALOG_H
+#endif // PROCESSINGDIALOG_H

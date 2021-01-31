@@ -35,10 +35,7 @@ Thumbs.db
 /.qmake.cache
 /.qmake.stash
 /backup
-/testtext
-/silesia
-/backup_fork
-/fork_2 qthread evolved
+/cleaned
 
 # qtcreator generated files
 *.pro.user*

@@ -1,7 +1,3 @@
-//
-// Created by pc on 03.11.2020.
-//
-
 #include "integrity_validation.h"
 #include <iostream>
 #include <fstream>
@@ -14,9 +10,11 @@
 #include <iomanip>
 #include <map>
 
+
 integrity_validation::integrity_validation() {
     generate_CRC32_lookup_table();
 }
+
 
 std::string integrity_validation::get_SHA1_from_file(const std::string &path_to_file, bool &aborting_var) {
     // implemented using pseudocode from: https://en.wikipedia.org/wiki/SHA-1#SHA-1_pseudocode
@@ -139,11 +137,11 @@ std::string integrity_validation::get_SHA1_from_file(const std::string &path_to_
         stream << std::hex << std::setw(8) << std::setfill('0') << h0 <<std::setw(8) << std::setfill('0') << h1 << std::setw(8) << std::setfill('0') << h2 << std::setw(8) << std::setfill('0') << h3 << std::setw(8) << std::setfill('0') << h4;
         std::string sha1hex = stream.str();
         this->SHA1 = sha1hex;
-        //std::cout << sha1hex << std::endl;
         return sha1hex;
     }
     return "";
 }
+
 
 std::string integrity_validation::get_SHA1_from_stream(std::fstream &target_file, uint64_t file_size, bool &aborting_var) {
     // implemented using pseudocode from: https://en.wikipedia.org/wiki/SHA-1#SHA-1_pseudocode
@@ -259,7 +257,6 @@ std::string integrity_validation::get_SHA1_from_stream(std::fstream &target_file
                 e = d;
                 d = c;
                 c = std::rotl(b, 30);
-                //std::cout << "c = " << c << std::endl;
                 b = a;
                 a = temp;
 
@@ -279,7 +276,6 @@ std::string integrity_validation::get_SHA1_from_stream(std::fstream &target_file
         stream << std::hex << std::setw(8) << std::setfill('0') << h0 <<std::setw(8) << std::setfill('0') << h1 << std::setw(8) << std::setfill('0') << h2 << std::setw(8) << std::setfill('0') << h3 << std::setw(8) << std::setfill('0') << h4;
         std::string sha1hex = stream.str();
         this->SHA1 = sha1hex;
-        //std::cout << sha1hex << std::endl;
         return sha1hex;
     }
     return "";
@@ -302,6 +298,7 @@ void integrity_validation::generate_CRC32_lookup_table() {
     }
 }
 
+
 std::string integrity_validation::get_CRC32_from_text(uint8_t *text, uint64_t text_size, bool& aborting_var) {
     // Based on pseudocode from wikipedia:
     // https://en.wikipedia.org/wiki/Cyclic_redundancy_check#CRC-32_algorithm
@@ -312,11 +309,11 @@ std::string integrity_validation::get_CRC32_from_text(uint8_t *text, uint64_t te
         std::stringstream stream;
         stream << "0x" << std::hex << std::setw(8) << std::setfill('0') << ~crc32;
         std::string crc32_str = stream.str();
-        // std::cout << "CRC-32:\n" << crc32_str << std::endl;
         return crc32_str;
     }
     else return "";
 }
+
 
 std::string integrity_validation::get_CRC32_from_file( std::string path, bool& aborting_var ) {
     // Based on pseudocode from wikipedia:
@@ -341,11 +338,11 @@ std::string integrity_validation::get_CRC32_from_file( std::string path, bool& a
         std::stringstream stream;
         stream << "0x" << std::hex << std::setw(8) << std::setfill('0') << ~crc32;
         std::string crc32_str = stream.str();
-        // std::cout << "CRC-32:\n" << crc32_str << std::endl;
         return crc32_str;
     }
     else return "";
 }
+
 
 std::string integrity_validation::get_CRC32_from_stream(std::fstream &source, bool &aborting_var) {
     // Based on pseudocode from wikipedia:

@@ -1,12 +1,6 @@
 #ifndef ARCHIVE_H
 #define ARCHIVE_H
-#include <string>
-#include <memory>
-#include <any>
-#include <fstream>
-#include <cassert>
-#include <filesystem>
-#include <iostream>
+
 #include "archive_structures.h"
 
 class archive
@@ -25,7 +19,7 @@ public:
     std::filesystem::path load_path;
 
     // Root folder of archive
-    std::unique_ptr<folder> archive_dir;
+    std::unique_ptr<folder> root_folder;
 
     // Stream for creating/loading archive
     std::fstream archive_file;

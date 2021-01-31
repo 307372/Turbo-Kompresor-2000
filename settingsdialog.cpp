@@ -1,6 +1,5 @@
 #include "settingsdialog.h"
 #include "ui_settingsdialog.h"
-
 #include "config.h"
 
 
@@ -16,15 +15,18 @@ SettingsDialog::SettingsDialog( MainWindow* mw_ptr, QWidget *parent ) :
     this->ui->checkBox_DarkMode->setChecked(config_ptr->get_dark_mode());
 }
 
+
 SettingsDialog::~SettingsDialog()
 {
     delete ui;
 }
 
+
 void SettingsDialog::on_pushButton_Cancel_clicked()
 {
     close();
 }
+
 
 void SettingsDialog::on_pushButton_Apply_clicked()
 {
@@ -37,6 +39,7 @@ void SettingsDialog::on_pushButton_Apply_clicked()
 
     close();
 }
+
 
 void SettingsDialog::on_checkBox_DarkMode_stateChanged(int state)
 {

@@ -1,12 +1,11 @@
-#include "mydialog.h"
+#include "processingdialog.h"
 #include "ui_mydialog.h"
+#include <cassert>
 
 
-// compression dialog constructors
-
-MyDialog::MyDialog(QWidget *parent) :
+ProcessingDialog::ProcessingDialog(QWidget *parent) :
     QDialog(parent),
-    ui(new Ui::MyDialog)
+    ui(new Ui::ProcessingDialog)
 {
     ui->setupUi(this);
     this->setModal(true);
@@ -17,9 +16,10 @@ MyDialog::MyDialog(QWidget *parent) :
     this->twfile_ptr = nullptr;
 }
 
-MyDialog::MyDialog(TreeWidgetFolder* twfolder, QStringList file_path_list, QWidget *parent) :
+
+ProcessingDialog::ProcessingDialog(TreeWidgetFolder* twfolder, QStringList file_path_list, QWidget *parent) :
     QDialog(parent),
-    ui(new Ui::MyDialog)
+    ui(new Ui::ProcessingDialog)
 {
     ui->setupUi(this);
     this->setModal(true);
@@ -31,9 +31,10 @@ MyDialog::MyDialog(TreeWidgetFolder* twfolder, QStringList file_path_list, QWidg
     this->paths_to_files = file_path_list;
 }
 
-MyDialog::MyDialog(TreeWidgetFile* twfile, QStringList file_path_list, QWidget *parent) :
+
+ProcessingDialog::ProcessingDialog(TreeWidgetFile* twfile, QStringList file_path_list, QWidget *parent) :
     QDialog(parent),
-    ui(new Ui::MyDialog)
+    ui(new Ui::ProcessingDialog)
 {
     ui->setupUi(this);
     this->setModal(true);
@@ -45,11 +46,10 @@ MyDialog::MyDialog(TreeWidgetFile* twfile, QStringList file_path_list, QWidget *
     this->paths_to_files = file_path_list;
 }
 
-// decompression dialog constructors
 
-MyDialog::MyDialog(std::vector<QTreeWidgetItem*> extraction_targets, QWidget *parent) :
+ProcessingDialog::ProcessingDialog(std::vector<QTreeWidgetItem*> extraction_targets, QWidget *parent) :
     QDialog(parent),
-    ui(new Ui::MyDialog)
+    ui(new Ui::ProcessingDialog)
 {
     this->extraction_targets = extraction_targets;
     ui->setupUi(this);
@@ -62,13 +62,10 @@ MyDialog::MyDialog(std::vector<QTreeWidgetItem*> extraction_targets, QWidget *pa
 }
 
 
-
-
-MyDialog::~MyDialog()
+ProcessingDialog::~ProcessingDialog()
 {
     delete ui;
     if (my_thread != nullptr) {
-        std::cout << "is thread running? " << my_thread->isRunning() << std::endl;
         while(!my_thread->wait(50));   // check if the thread finished working every 50ms
 
         delete my_thread;
@@ -77,7 +74,8 @@ MyDialog::~MyDialog()
     if (th_decompression != nullptr) delete th_decompression;
 }
 
-void MyDialog::closeEvent(QCloseEvent *event) {
+
+void ProcessingDialog::closeEvent(QCloseEvent *event) {
 
     if (my_thread != nullptr) {
         if ( !this->my_thread->isFinished() ) {
@@ -92,9 +90,8 @@ void MyDialog::closeEvent(QCloseEvent *event) {
                 if (reply == QMessageBox::Yes) {
                     emit abort_processing();
                     if (my_thread != nullptr) {
-                        std::cout << "is thread running? " << my_thread->isRunning() << std::endl;
                         while(!my_thread->wait(50));   // check if the thread finished working every 50ms
-                        this->on_processing_finished(false);    // finished unsuccessfully
+                        this->slot_processing_finished(false);    // finished unsuccessfully
                         QMessageBox::information(this, QString("Failed!"), QString("Processing failed!"));
                     }
                     event->accept();
@@ -112,13 +109,13 @@ void MyDialog::closeEvent(QCloseEvent *event) {
             else assert(false);
         }
         else {
-            std::cout << "Closing!" << std::endl;
             event->accept();
         }
     }
 }
 
-uint16_t MyDialog::get_flags() {
+
+uint16_t ProcessingDialog::get_flags() {
 
     std::bitset<16> flags(0);
     flags[0] = ui->checkBox_BWT->isChecked();
@@ -152,7 +149,8 @@ uint16_t MyDialog::get_flags() {
     return (uint16_t)flags.to_ulong();
 }
 
-void MyDialog::prepare_GUI_compression() {
+
+void ProcessingDialog::prepare_GUI_compression() {
     this->setWindowTitle( "Compression" );
     compression = true;
     th_decompression = nullptr;
@@ -165,7 +163,8 @@ void MyDialog::prepare_GUI_compression() {
     ui->buttonFinish->setDisabled(true);
 }
 
-void MyDialog::prepare_GUI_decompression() {
+
+void ProcessingDialog::prepare_GUI_decompression() {
     this->setWindowTitle( "Decompression" );
     compression = false;
     th_decompression = nullptr;
@@ -180,18 +179,19 @@ void MyDialog::prepare_GUI_decompression() {
 }
 
 
-void MyDialog::on_buttonCancel_clicked()
+void ProcessingDialog::on_buttonCancel_clicked()
 {
     this->close();
 }
 
 
-void MyDialog::on_pushButton_abort_clicked()
+void ProcessingDialog::on_pushButton_abort_clicked()
 {
     this->close();
 }
 
-void MyDialog::correct_duplicate_names(file* target_file, folder* parent_folder)
+
+void ProcessingDialog::correct_duplicate_names(file* target_file, folder* parent_folder)
 {
     std::vector<std::string> name_list;
     if (parent_folder->child_file_ptr == nullptr) return;
@@ -248,7 +248,8 @@ void MyDialog::correct_duplicate_names(file* target_file, folder* parent_folder)
 
 }
 
-void MyDialog::on_pushButton_compress_clicked()
+
+void ProcessingDialog::on_pushButton_compress_clicked()
 {
     // before we begin, let's create a temp file, on which we will be working
     std::filesystem::copy_file(parent_mw->archive_ptr->load_path, parent_mw->temp_path, std::filesystem::copy_options::overwrite_existing);
@@ -275,35 +276,36 @@ void MyDialog::on_pushButton_compress_clicked()
     else assert(false); // should never happen
 
     progress_step_value = 0;
-    th_compression = new thread_compression( list_of_files, &progress_step_value, &progressBarStepMax, parent_mw->temp_path );
+    th_compression = new compression_object( list_of_files, &progress_step_value, &progressBarStepMax, parent_mw->temp_path );
     my_thread = new QThread;
     th_compression->moveToThread(my_thread);
 
-    connect( my_thread, &QThread::started , th_compression, &thread_compression::start_processing );
-    connect( th_compression, &thread_compression::ProgressNextFile, ui->progressBarTotal, &QProgressBar::setValue );
-    connect( th_compression, &thread_compression::ProgressNextStep, ui->progressBarFile,  &QProgressBar::setValue );
-    connect( th_compression, &thread_compression::setFilePathLabel, ui->label_currentfile_value, &QLabel::setText );
-    connect( th_compression, &thread_compression::processing_finished, this,    &MyDialog::on_processing_finished );
-    connect( this, &MyDialog::abort_processing, th_compression, &thread_compression::abort_processing, Qt::ConnectionType::DirectConnection );
-    connect( th_compression, &thread_compression::displayFailedFiles, this, &MyDialog::displayFailedFiles );
+    connect( my_thread, &QThread::started , th_compression, &compression_object::start_processing );
+    connect( th_compression, &compression_object::ProgressNextFile, ui->progressBarTotal, &QProgressBar::setValue );
+    connect( th_compression, &compression_object::ProgressNextStep, ui->progressBarFile,  &QProgressBar::setValue );
+    connect( th_compression, &compression_object::setFilePathLabel, ui->label_currentfile_value, &QLabel::setText );
+    connect( th_compression, &compression_object::processing_finished, this,    &ProcessingDialog::slot_processing_finished );
+    connect( this, &ProcessingDialog::abort_processing, th_compression, &compression_object::abort_processing, Qt::ConnectionType::DirectConnection );
+    connect( th_compression, &compression_object::displayFailedFiles, this, &ProcessingDialog::displayFailedFiles );
     startProcessingTimer();
     my_thread->start();
 }
 
-void MyDialog::onProgressNextFile(double value) {
-    std::cout << "Event nextfile caugth, value = " << (int)value << std::endl;
+
+void ProcessingDialog::onProgressNextFile(double value) {
     ui->progressBarTotal->setValue( (int)value );
     ui->progressBarFile->setValue(0);
 }
 
-void MyDialog::onProgressNextStep(double value) {
-    std::cout << "Event nextstep caugth, value = " << round(value*100) << std::endl;
+
+void ProcessingDialog::onProgressNextStep(double value) {
     ui->progressBarFile->setValue( round(value*100) );
 }
 
-void MyDialog::on_processing_finished(bool successful) {
+
+void ProcessingDialog::slot_processing_finished(bool successful) {
     timer_elapsed_time->stop();
-    std::cout << "on_processing_finished" << std::endl;
+
     if (successful) {
         if (compression) {
             if (parent_mw->archive_ptr->archive_file.is_open()) parent_mw->archive_ptr->archive_file.close();
@@ -317,17 +319,12 @@ void MyDialog::on_processing_finished(bool successful) {
             // reopening fstream to archive
             parent_mw->archive_ptr->archive_file.open( parent_mw->archive_ptr->load_path, std::ios::binary | std::ios::in | std::ios::out );
         }
-        std::cout << "Process of modifying the archive seems to have succeeded" << std::endl;
         QMessageBox::information(this, QString("Success!"), QString("Processing succeeded!"));
 
     }
     else {
         if (compression) {
-            std::cout << "Processing aborted" << std::endl;
-
             std::filesystem::remove(parent_mw->temp_path);
-
-            std::cout << "Cleanup successful" << std::endl;
         }
     }
     ui->buttonFinish->setDisabled(false);
@@ -335,8 +332,7 @@ void MyDialog::on_processing_finished(bool successful) {
 }
 
 
-
-void MyDialog::on_buttonDecompressionStart_clicked()
+void ProcessingDialog::on_buttonDecompressionStart_clicked()
 {
     ui->stackedWidget->setCurrentIndex(0);
 
@@ -379,12 +375,11 @@ void MyDialog::on_buttonDecompressionStart_clicked()
         }
     }
     else {
-
         // setting paths for selected files
         // needs to be done after getting a vector of files for extraction,
         // since extraction_targets is a vector ordered by when elements were selected, and not by how deep is the file in the structure
 
-        parent_mw->archive_ptr->archive_dir->set_path( target_path, true );
+        parent_mw->archive_ptr->root_folder->set_path( target_path, true );
         // creating all necessary folders
         for (auto single_folder : folders) std::filesystem::create_directories( single_folder->path );
         for (auto single_file   : files  ) std::filesystem::create_directories( single_file->path   );
@@ -405,50 +400,53 @@ void MyDialog::on_buttonDecompressionStart_clicked()
     connect( th_decompression, &decompression_object::ProgressNextFile, ui->progressBarTotal, &QProgressBar::setValue );
     connect( th_decompression, &decompression_object::ProgressNextStep, ui->progressBarFile,  &QProgressBar::setValue );
     connect( th_decompression, &decompression_object::setFilePathLabel, ui->label_currentfile_value, &QLabel::setText );
-    connect( th_decompression, &decompression_object::processing_finished, this,    &MyDialog::on_processing_finished );
-    connect( this, &MyDialog::abort_processing, th_decompression, &decompression_object::abort_processing, Qt::ConnectionType::DirectConnection );
-    connect( th_decompression, &decompression_object::displayFailedFiles, this, &MyDialog::displayFailedFiles );
+    connect( th_decompression, &decompression_object::processing_finished, this,    &ProcessingDialog::slot_processing_finished );
+    connect( this, &ProcessingDialog::abort_processing, th_decompression, &decompression_object::abort_processing, Qt::ConnectionType::DirectConnection );
+    connect( th_decompression, &decompression_object::displayFailedFiles, this, &ProcessingDialog::displayFailedFiles );
 
     startProcessingTimer();
     my_thread->start();
 }
 
-void MyDialog::displayFailedFiles(QStringList failed_paths)
+
+void ProcessingDialog::displayFailedFiles(QStringList failed_paths)
 {
     QString contents;
-    // std::cout << "Displaying failed files:\n";
     for (int32_t i=0; i < failed_paths.size(); ++i) {
-        // std::cout << failed_paths[i].toStdString() << std::endl;
         contents.append(failed_paths[i] + "\n");
     }
     QMessageBox::information(this, "Failed files", contents);
 }
 
-void MyDialog::on_buttonDecompressionAbort_clicked()
+
+void ProcessingDialog::on_buttonDecompressionAbort_clicked()
 {
     this->close();
 }
 
-void MyDialog::set_progress_file_value(uint16_t value) {
+
+void ProcessingDialog::set_progress_file_value(uint16_t value) {
     ui->progressBarFile->setValue( value );
-    std::cout << "file progress value set: " << value << std::endl;
 }
 
-void MyDialog::on_buttonFinish_clicked()
+
+void ProcessingDialog::on_buttonFinish_clicked()
 {
     this->close();
 }
 
-void MyDialog::startProcessingTimer() {
+
+void ProcessingDialog::startProcessingTimer() {
     time_start = std::chrono::high_resolution_clock::now();
     timer_elapsed_time = new QTimer(this);
-    connect( timer_elapsed_time, &QTimer::timeout, this, &MyDialog::onTimerTimeout );
+    connect( timer_elapsed_time, &QTimer::timeout, this, &ProcessingDialog::onTimerTimeout );
 
     timer_elapsed_time->start(100);  // refresh every 16 ms or slightly more often than 60 times a second
 
 }
 
-void MyDialog::onTimerTimeout() {
+
+void ProcessingDialog::onTimerTimeout() {
 
     uint32_t elapsed = std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::high_resolution_clock::now() - time_start ).count();
     elapsed = floor(elapsed/100.0);
@@ -473,11 +471,11 @@ void MyDialog::onTimerTimeout() {
 
 
     ui->label_duration_value->setText( formatted_time );
-    std::cout << "progress: " << progress_step_value << " / " << progressBarStepMax << std::endl; // round(progress_step_value*100/progressBarStepMax) << std::endl;
     ui->progressBarFile->setValue( round(progress_step_value*100/progressBarStepMax) );
 }
 
-void MyDialog::on_button_decompression_path_dialog_clicked()
+
+void ProcessingDialog::on_button_decompression_path_dialog_clicked()
 {
     QString filter = "All Files (*.*)" ;
     QFileDialog dialog(this);
@@ -487,36 +485,36 @@ void MyDialog::on_button_decompression_path_dialog_clicked()
 }
 
 
-thread_compression::thread_compression(std::vector<file*> given_file_list, uint16_t* progress_ptr, uint32_t* progressBarStepMax, std::filesystem::path tmp_path) : QObject(nullptr)
+
+compression_object::compression_object(std::vector<file*> given_file_list, uint16_t* progress_ptr, uint32_t* progressBarStepMax, std::filesystem::path tmp_path) : QObject(nullptr)
 {
     temp_path = tmp_path;
     this->file_list = given_file_list;
-    // this->stream = given_stream;
     this->aborting_variable = false;
     this->progress_step = progress_ptr;
     this->progressBarStepMax = progressBarStepMax;
-
-
 }
 
-thread_compression::~thread_compression() {
+
+compression_object::~compression_object() {
     if (temp_output.is_open()) temp_output.close();
 }
 
 
-void thread_compression::start_processing() {
+void compression_object::start_processing() {
 
     this->temp_output.open(temp_path, std::ios::binary | std::ios::in | std::ios::out);
     assert( temp_output.is_open() );
     start();
 }
 
-void thread_compression::abort_processing() {
+
+void compression_object::abort_processing() {
     aborting_variable = true;
 }
 
 
-void thread_compression::start() {
+void compression_object::start() {
     emit ProgressNextFile(0);
     emit ProgressNextStep(0);
 
@@ -547,7 +545,6 @@ void thread_compression::start() {
 
 
 
-
 decompression_object::decompression_object( std::vector<file*> file_list, std::fstream& source, bool validate_integrity, uint16_t* progress_ptr, uint32_t* progressBarStepMax ) : QObject(nullptr)
 {
     this->file_list = file_list;
@@ -558,6 +555,7 @@ decompression_object::decompression_object( std::vector<file*> file_list, std::f
     this->progressBarStepMax = progressBarStepMax;
 }
 
+
 decompression_object::~decompression_object() {
 }
 
@@ -566,14 +564,14 @@ void decompression_object::start_processing() {
     start();
 }
 
+
 void decompression_object::abort_processing() {
     aborting_variable = true;
-    std::cout << "Abort! Abort! Abort!" << std::endl;
 }
 
-void decompression_object::start() {
-    std::cout << "thread running\n" << std::flush;
 
+void decompression_object::start()
+{
     emit ProgressNextFile(0);
     emit ProgressNextStep(0);
 
@@ -586,48 +584,23 @@ void decompression_object::start() {
         *progress_step = 0;
         std::bitset<16> bin_flags(file_list[i]->flags_value);
 
-        *progressBarStepMax = ceill((long double)file_list[i]->uncompressed_size / (long double)((1ull << 24)-1))*bin_flags.count();
+        *progressBarStepMax = ceill((long double)file_list[i]->original_size / (long double)((1ull << 24)-1))*bin_flags.count();
 
         std::filesystem::path label_path = file_list[i]->path;
         label_path.append( file_list[i]->name );
         emit setFilePathLabel( label_path.c_str() );
 
         bool successful = false;
+
         if (!aborting_variable) successful = file_list[i]->unpack( file_list[i]->path, *source_stream, aborting_variable, false, validate_integrity, progress_step );
-        std::cout << "*progress_step = " << *progress_step << std::endl;
         if (!successful) failed_files.append(QString::fromStdString(file_list[i]->path + '/' +file_list[i]->name));
 
         emit ProgressNextFile((1.0+i)/(double)file_list.size()*100.0);
     }
+
     emit ProgressNextStep(100);
-    std::cout << "decompression_object processing_finished" << std::endl;
     emit processing_finished( !aborting_variable and failed_files.empty() );
+
     if (!failed_files.empty()) emit displayFailedFiles(failed_files);
     QThread::currentThread()->quit();
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

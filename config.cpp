@@ -3,16 +3,17 @@
 #include <assert.h>
 #include <iostream>
 
+
 Config::Config()
 {
     parse();
 }
 
+
 Config::~Config()
 {
     if (config_file.is_open()) config_file.close();
 }
-
 
 
 void Config::parse()
@@ -44,7 +45,6 @@ void Config::parse()
 
             property_counter++;
         }
-        // std::cout << "Loaded extraction path:\n" << extraction_path.string() << std::endl;
     }
     else { // if there's no config file
         save_default();
@@ -55,7 +55,6 @@ void Config::parse()
 
     if (config_file.is_open()) config_file.close();
 }
-
 
 
 void Config::save()
@@ -79,7 +78,6 @@ void Config::save()
 }
 
 
-
 void Config::save_default()
 {
     if (config_file.is_open()) config_file.close();
@@ -101,21 +99,3 @@ void Config::save_default()
 
     if (config_file.is_open()) config_file.close();
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

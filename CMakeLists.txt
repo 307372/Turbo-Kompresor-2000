@@ -22,7 +22,7 @@ add_executable(Turbo-Kompresor-2000
 
   mainwindow.cpp mainwindow.h mainwindow.ui
 
-  mydialog.cpp mydialog.h  mydialog.ui
+  processingdialog.cpp processingdialog.h mydialog.ui
 
   settingsdialog.cpp settingsdialog.h settingsdialog.ui
 

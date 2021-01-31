@@ -1,12 +1,7 @@
-//
-// Created by pc on 11.11.2020.
-//
-
 #ifndef EXPERIMENTAL_PROJECT_EXCEPTIONS_H
 #define EXPERIMENTAL_PROJECT_EXCEPTIONS_H
 #include <exception>
 #include <string>
-
 
 
 class NotImplementedException : public std::exception {

@@ -8,13 +8,12 @@
 #include <QFileDialog>
 #include <QAbstractItemView>
 #include <QInputDialog>
-
 #include <memory>
-#include <typeinfo>
 
 #include "archive.h"
-#include "mydialog.h"
+#include "processingdialog.h"
 #include "config.h"
+
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -27,8 +26,8 @@ class MainWindow : public QMainWindow
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
-    void newArchiveModel();
-    void createEmptyArchive();
+    void new_archive_model();
+    void create_empty_archive();
     void load_archive( std::string path_to_archive );
     void reload_archive();
     void write_file_to_current_archive( file* file_model, bool& aborting_var );
@@ -43,28 +42,25 @@ public:
 
     std::filesystem::path temp_path = std::filesystem::temp_directory_path().append( "tk2k_archive.tmp" );
 
-
-
 private slots:
-    void on_actionNew_archive_triggered();
+    void new_archive_triggered();
 
-    void on_actionOpen_archive_triggered();
+    void open_archive_triggered();
 
-    void on_buttonExtractSelected_clicked();
+    void extract_selected_clicked();
 
-    void on_buttonExtractAll_clicked();
+    void extract_all_clicked();
 
-    void on_buttonAddNewFile_clicked();
+    void add_new_file_clicked();
 
-    void on_buttonAddNewFolder_clicked();
+    void add_new_folder_clicked();
 
-    void openSettingsDialog();
+    void open_settings_dialog();
 
-    void on_buttonRemoveSelected_clicked();
+    void remove_selected_clicked();
 
 private:
     Ui::MainWindow *ui;
-
 };
 
 
@@ -79,7 +75,6 @@ public:
 
     void unpack( std::string path_for_extraction, bool& aborting_var );
     void setDisabled(bool disabled);
-
     bool operator<(const QTreeWidgetItem &other)const;
 };
 
@@ -96,10 +91,6 @@ public:
     void setDisabled(bool disabled);
     bool operator<(const QTreeWidgetItem &other)const;
 };
-
-
-
-
 
 #endif // MAINWINDOW_H
 

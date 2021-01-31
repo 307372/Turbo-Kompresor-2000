@@ -1,11 +1,8 @@
 #ifndef STATISTICAL_TOOLS_H
 #define STATISTICAL_TOOLS_H
-#include <vector>
 #include <string>
 #include <fstream>
-#include <filesystem>
-#include <cassert>
-#include <numeric>
+
 
 class statistical_tools
 {
@@ -27,7 +24,6 @@ public:
     void model_from_text_1back( uint8_t text[], uint32_t text_size );
     void count_symbols_from_text_0back( uint8_t text[], uint32_t text_size );
     void count_symbols_from_text_1back( uint8_t text[], uint32_t text_size );
-
 };
 
 #endif // STATISTICAL_TOOLS_H
