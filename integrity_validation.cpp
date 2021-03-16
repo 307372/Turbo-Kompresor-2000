@@ -1,22 +1,20 @@
 #include "integrity_validation.h"
-#include <iostream>
+
 #include <fstream>
-#include <assert.h>
+#include <cassert>
 #include <vector>
 #include <filesystem>
 #include <climits>
 #include <bitset>
 #include <bit>
-#include <iomanip>
-#include <map>
 
 
-integrity_validation::integrity_validation() {
+IntegrityValidation::IntegrityValidation() {
     generate_CRC32_lookup_table();
 }
 
 
-std::string integrity_validation::get_SHA1_from_file(const std::string &path_to_file, bool &aborting_var) {
+std::string IntegrityValidation::get_SHA1_from_file(const std::string &path_to_file, bool &aborting_var) {
     // implemented using pseudocode from: https://en.wikipedia.org/wiki/SHA-1#SHA-1_pseudocode
 
     if (!aborting_var) {
@@ -143,7 +141,7 @@ std::string integrity_validation::get_SHA1_from_file(const std::string &path_to_
 }
 
 
-std::string integrity_validation::get_SHA1_from_stream(std::fstream &target_file, uint64_t file_size, bool &aborting_var) {
+std::string IntegrityValidation::get_SHA1_from_stream(std::fstream &target_file, uint64_t file_size, bool &aborting_var) {
     // implemented using pseudocode from: https://en.wikipedia.org/wiki/SHA-1#SHA-1_pseudocode
 
     if (!aborting_var) {
@@ -282,7 +280,7 @@ std::string integrity_validation::get_SHA1_from_stream(std::fstream &target_file
 }
 
 
-void integrity_validation::generate_CRC32_lookup_table() {
+void IntegrityValidation::generate_CRC32_lookup_table() {
     //source: https://stackoverflow.com/questions/26049150/calculate-a-32-bit-crc-lookup-table-in-c-c/26051190
     uint64_t poly = 0xEDB88320; // reversed 0x4C11DB7
     uint64_t remainder;
@@ -299,7 +297,7 @@ void integrity_validation::generate_CRC32_lookup_table() {
 }
 
 
-std::string integrity_validation::get_CRC32_from_text(uint8_t *text, uint64_t text_size, bool& aborting_var) {
+std::string IntegrityValidation::get_CRC32_from_text(uint8_t *text, uint64_t text_size, bool& aborting_var) {
     // Based on pseudocode from wikipedia:
     // https://en.wikipedia.org/wiki/Cyclic_redundancy_check#CRC-32_algorithm
     uint32_t crc32 = UINT32_MAX;
@@ -315,7 +313,7 @@ std::string integrity_validation::get_CRC32_from_text(uint8_t *text, uint64_t te
 }
 
 
-std::string integrity_validation::get_CRC32_from_file( std::string path, bool& aborting_var ) {
+std::string IntegrityValidation::get_CRC32_from_file( std::string path, bool& aborting_var ) {
     // Based on pseudocode from wikipedia:
     // https://en.wikipedia.org/wiki/Cyclic_redundancy_check#CRC-32_algorithm
 
@@ -344,7 +342,7 @@ std::string integrity_validation::get_CRC32_from_file( std::string path, bool& a
 }
 
 
-std::string integrity_validation::get_CRC32_from_stream(std::fstream &source, bool &aborting_var) {
+std::string IntegrityValidation::get_CRC32_from_stream(std::fstream &source, bool &aborting_var) {
     // Based on pseudocode from wikipedia:
     // https://en.wikipedia.org/wiki/Cyclic_redundancy_check#CRC-32_algorithm
 

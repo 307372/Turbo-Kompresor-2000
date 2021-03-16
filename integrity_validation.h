@@ -1,12 +1,13 @@
-#ifndef TURBO_KOMPRESOR_2000_INTEGRITY_VALIDATION_H
-#define TURBO_KOMPRESOR_2000_INTEGRITY_VALIDATION_H
+#ifndef INTEGRITY_VALIDATION_H
+#define INTEGRITY_VALIDATION_H
+
 #include <string>
 
 
-class integrity_validation {
+class IntegrityValidation {
     std::string SHA1;
 public:
-    integrity_validation();
+    IntegrityValidation();
     std::string get_SHA1_from_file( const std::string& path_to_file, bool& aborting_var );
     std::string get_SHA1_from_stream( std::fstream& source, uint64_t file_size, bool& aborting_var );
 
@@ -19,4 +20,4 @@ private:
     uint32_t CRC32_lookup_table[256];
 };
 
-#endif //TURBO_KOMPRESOR_2000_INTEGRITY_VALIDATION_H
+#endif

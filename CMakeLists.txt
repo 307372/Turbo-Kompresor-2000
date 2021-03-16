@@ -20,13 +20,11 @@ find_library( divsufsort_lib divsufsort )
 add_executable(Turbo-Kompresor-2000
   main.cpp
 
-  mainwindow.cpp mainwindow.h mainwindow.ui
+  archive_window.cpp archive_window.h archive_window.ui
 
-  processingdialog.cpp processingdialog.h mydialog.ui
+  processing_dialog.cpp processing_dialog.h processing_dialog.ui
 
-  settingsdialog.cpp settingsdialog.h settingsdialog.ui
-
-  statistical_tools.cpp statistical_tools.h
+  settings_dialog.cpp settings_dialog.h settings_dialog.ui
 
   integrity_validation.cpp integrity_validation.h
 
@@ -34,11 +32,21 @@ add_executable(Turbo-Kompresor-2000
 
   archive_structures.h archive_structures.cpp
 
-  project_exceptions.h project_exceptions.cpp
+  misc/project_exceptions.h misc/project_exceptions.cpp
 
   compression.h compression.cpp
 
   config.h config.cpp
+
+  misc/bitbuffer.h misc/bitbuffer.cpp
+
+  misc/processing_helpers.h misc/processing_helpers.cpp
+
+  misc/custom_tree_widget_items.h misc/custom_tree_widget_items.cpp
+
+  misc/multithreading.h
+
+  misc/statistics.h
 
   resources.qrc
 

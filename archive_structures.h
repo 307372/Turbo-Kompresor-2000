@@ -1,18 +1,20 @@
-#ifndef EXPERIMENTAL_ARCHIVE_STRUCTURES_H
-#define EXPERIMENTAL_ARCHIVE_STRUCTURES_H
+#ifndef ARCHIVE_STRUCTURES_H
+#define ARCHIVE_STRUCTURES_H
+
 #include <string>
 #include <fstream>
 #include <filesystem>
 #include <thread>
 #include <vector>
+
 #include "compression.h"
-#include "project_exceptions.h"
 #include "integrity_validation.h"
+#include "misc/project_exceptions.h"
 
 
-struct file;
+struct File;
 
-struct folder
+struct Folder
 {
     static const uint8_t base_metadata_size = 33;   // base metadata size (excluding name_size) (in bytes)
     uint64_t location=0;                            // absolute location of this folder in archive
@@ -21,26 +23,26 @@ struct folder
     std::string name;                               // folder's name
     std::filesystem::path path;                     // extraction path
 
-    folder* parent_ptr = nullptr;                   // ptr to parent folder in memory
+    Folder* parent_ptr = nullptr;                   // ptr to parent folder in memory
 
     bool alreadySaved = false;                      // true - file has already been saved to archive, false - it's only in the model
     bool ptr_already_gotten = false;                // true - method get_ptrs was already used on it, so it's in the vector
 
-    std::unique_ptr<folder> child_dir_ptr=nullptr;  // ptr to first subfolder in memory
+    std::unique_ptr<Folder> child_dir_ptr=nullptr;  // ptr to first subfolder in memory
 
-    std::unique_ptr<folder> sibling_ptr=nullptr;    // ptr to next sibling folder in memory
+    std::unique_ptr<Folder> sibling_ptr=nullptr;    // ptr to next sibling folder in memory
 
-    std::unique_ptr<file> child_file_ptr=nullptr;   // ptr to first file in memory
+    std::unique_ptr<File> child_file_ptr=nullptr;   // ptr to first file in memory
 
-    folder( std::unique_ptr<folder> &parent, std::string folder_name );
-    folder( folder* parent, std::string folder_name );
-    folder();
+    Folder( std::unique_ptr<Folder> &parent, std::string folder_name );
+    Folder( Folder* parent, std::string folder_name );
+    Folder();
 
     void recursive_print(std::ostream &os) const;
 
-    friend std::ostream& operator<<(std::ostream& os, const folder& f);
+    friend std::ostream& operator<<(std::ostream& os, const Folder& f);
 
-    void parse( std::fstream &os, uint64_t pos, folder* parent, std::unique_ptr<folder> &shared_this  );
+    void parse( std::fstream &os, uint64_t pos, Folder* parent, std::unique_ptr<Folder> &shared_this  );
 
     void append_to_archive( std::fstream& archive_file, bool& aborting_var );
 
@@ -50,14 +52,14 @@ struct folder
 
     void copy_to_another_archive( std::fstream& source, std::fstream& destination, uint64_t parent_location, uint64_t previous_sibling_location );
 
-    void get_ptrs( std::vector<folder*>& folders, std::vector<file*>& files );
+    void get_ptrs( std::vector<Folder*>& folders, std::vector<File*>& files );
 
     void set_path( std::filesystem::path extraction_path, bool set_all_paths );
 };
 
 
 
-struct file
+struct File
 {
     static const uint8_t base_metadata_size = 43;   // base metadata size (excluding name_size) (in bytes)
     std::string path;
@@ -66,13 +68,13 @@ struct file
     uint8_t name_length=0;                          // length of file name (in bytes)
     std::string name;                               // folder's name
 
-    folder* parent_ptr = nullptr;                   // ptr to parent folder in memory
+    Folder* parent_ptr = nullptr;                   // ptr to parent folder in memory
 
     bool alreadySaved = false;                      // true - file has already been saved to archive, false - it's only in the model
     bool alreadyExtracted = false;                  // true - file has already been extracted
     bool ptr_already_gotten = false;                // true - method get_ptrs was already used on it, so it's in the vector
 
-    std::unique_ptr<file> sibling_ptr=nullptr;      // ptr to next sibling file in memory
+    std::unique_ptr<File> sibling_ptr=nullptr;      // ptr to next sibling file in memory
 
     uint16_t flags_value=0;                         // 16 flags represented as 16-bit int
 
@@ -85,9 +87,9 @@ struct file
 
     void recursive_print(std::ostream &os) const;
 
-    friend std::ostream& operator<<(std::ostream &os, const file &f);
+    friend std::ostream& operator<<(std::ostream &os, const File &f);
 
-    void parse( std::fstream &os, uint64_t pos, folder* parent );
+    void parse( std::fstream &os, uint64_t pos, Folder* parent );
 
     bool append_to_archive( std::fstream& archive_file, bool& aborting_var, bool write_siblings = true, uint16_t* progress_var = nullptr );
 
@@ -102,7 +104,7 @@ struct file
 
     void copy_to_another_archive( std::fstream& source, std::fstream& destination, uint64_t parent_location, uint64_t previous_sibling_location, uint16_t previous_name_length );
 
-    void get_ptrs( std::vector<file*>& files, bool get_siblings_too = false );
+    void get_ptrs( std::vector<File*>& files, bool get_siblings_too = false );
 
     void set_path( std::filesystem::path extraction_path, bool set_all_paths );
 };

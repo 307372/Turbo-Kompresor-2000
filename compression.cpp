@@ -1,7 +1,6 @@
 #include "compression.h"
 
 #include <iostream>
-#include <chrono>
 #include <list>
 #include <climits>
 #include <cmath>
@@ -10,12 +9,14 @@
 
 #include <divsufsort.h> // external library
 
+#include "misc/bitbuffer.h"
+#include "misc/statistics.h"
 
-Compression::Compression( bool& aborting_variable ) {
-    this->aborting_var = &aborting_variable;
-    text = new uint8_t [0];
-    size = 0;
-}
+
+Compression::Compression( bool& aborting_variable ) :
+    aborting_var(&aborting_variable)
+  , text(new uint8_t[0])
+  , size(0) {}
 
 
 Compression::~Compression() {
@@ -23,7 +24,8 @@ Compression::~Compression() {
 }
 
 
-void Compression::load_text( std::fstream &input, uint64_t text_size ) {
+void Compression::load_text( std::fstream &input, uint64_t text_size )
+{
     if (!*aborting_var) {
         delete[] this->text;
         this->size = text_size;
@@ -543,8 +545,7 @@ void Compression::AC_make()
         uint64_t quarter = roundl(wholed / 4.0);
 
 
-        statistical_tools st;
-        st.iid_model_from_text( this->text, this->size );
+        std::vector<uint64_t> r = model::memoryless(this->text, this->size);
 
         if (*aborting_var) return;
 
@@ -559,17 +560,17 @@ void Compression::AC_make()
         std::vector<uint64_t> c;
         std::vector<uint64_t> d;
         for (uint16_t i=0; i < r_size; i++) {
-            output[8 + 4 * i] = st.r[i] & 0xFFu;
-            output[8 + 4 * i + 1] = (st.r[i] >> 8u) & 0xFFu;
-            output[8 + 4 * i + 2] = (st.r[i] >> 16u) & 0xFFu;
-            output[8 + 4 * i + 3] = (st.r[i] >> 24u) & 0xFFu;
+            output[8 + 4 * i] = r[i] & 0xFFu;
+            output[8 + 4 * i + 1] = (r[i] >> 8u) & 0xFFu;
+            output[8 + 4 * i + 2] = (r[i] >> 16u) & 0xFFu;
+            output[8 + 4 * i + 3] = (r[i] >> 24u) & 0xFFu;
 
             // generate c and d, where c[i] is lower bound to get i-th letter of our alphabet, and d[i] is the upper bound
             uint64_t sum = 0;
-            std::for_each(std::begin(st.r), std::begin(st.r)+i, [&] (uint64_t j) {sum += j;} );
+            std::for_each(std::begin(r), std::begin(r)+i, [&] (uint64_t j) {sum += j;} );
             c.push_back(sum);
             if (i != r_size-1)
-                d.push_back(sum+st.r[i]);
+                d.push_back(sum+r[i]);
             else
                 d.push_back(whole);
         }
@@ -578,7 +579,7 @@ void Compression::AC_make()
         if (true)
         {
             uint64_t sum = 0;
-            for (auto& n : st.r)
+            for (auto& n : r)
                 sum += n;
             assert(sum == whole);
         }
@@ -589,7 +590,7 @@ void Compression::AC_make()
         uint64_t w = 0;
         uint32_t s = 0;
 
-        Text_write_bitbuffer bitout(output );
+        TextWriteBitbuffer bitout(output );
 
 
 
@@ -703,7 +704,7 @@ void Compression::AC_reverse()
             }
         }
 
-        Text_read_bitbuffer in_bit(this->text, compressed_file_size, 4+4+256*4);
+        TextReadBitbuffer in_bit(this->text, compressed_file_size, 4+4+256*4);
 
         uint64_t a = 0;
         uint64_t b = whole;
@@ -818,8 +819,7 @@ void Compression::AC2_make() {
         uint64_t quarter = roundl(wholed / 4.0);
 
 
-        statistical_tools st;
-        st.model_from_text_1back(this->text, this->size);
+        std::vector<std::vector<uint32_t>> rr = model::order_1(this->text, this->size);
 
         if (*aborting_var) return;
 
@@ -840,14 +840,14 @@ void Compression::AC2_make() {
             c[r][0] = 0;
 
             for (uint16_t i = 0; i < r_size; i++) { // saving probabilites to file, 256*256*4 bytes, unfortunately
-                if (st.rr[r][i] != 0) {
-                    output[8 + r * 256 * 4 + 4 * i] = st.rr[r][i] & 0xFFu;
-                    output[8 + r * 256 * 4 + 4 * i + 1] = (st.rr[r][i] >> 8u) & 0xFFu;
-                    output[8 + r * 256 * 4 + 4 * i + 2] = (st.rr[r][i] >> 16u) & 0xFFu;
-                    output[8 + r * 256 * 4 + 4 * i + 3] = (st.rr[r][i] >> 24u) & 0xFFu;
+                if (rr[r][i] != 0) {
+                    output[8 + r * 256 * 4 + 4 * i] = rr[r][i] & 0xFFu;
+                    output[8 + r * 256 * 4 + 4 * i + 1] = (rr[r][i] >> 8u) & 0xFFu;
+                    output[8 + r * 256 * 4 + 4 * i + 2] = (rr[r][i] >> 16u) & 0xFFu;
+                    output[8 + r * 256 * 4 + 4 * i + 3] = (rr[r][i] >> 24u) & 0xFFu;
                 }
                 // generating partial sums c and d
-                c[r][i + 1] = (c[r][i] + st.rr[r][i]);
+                c[r][i + 1] = (c[r][i] + rr[r][i]);
                 d[r][i] = c[r][i + 1];
             }
             d[r][255] = whole;
@@ -856,7 +856,7 @@ void Compression::AC2_make() {
 
         //check if sum of probabilities represented as UINT_MAX is equal to whole
         if (true) {
-            for (auto &r : st.rr) {
+            for (auto &r : rr) {
                 uint64_t sum = 0;
                 for (auto &n : r) sum += n;
                 assert(sum == whole or sum == 0);
@@ -871,7 +871,7 @@ void Compression::AC2_make() {
 
         if (*aborting_var) return;
 
-        Text_write_bitbuffer bitout(output);
+        TextWriteBitbuffer bitout(output);
 
         output += text[0];  //  saving first char, for decoding purposes
 
@@ -992,7 +992,7 @@ void Compression::AC2_reverse()
 
         if (*aborting_var) return;
 
-        Text_read_bitbuffer in_bit(this->text, compressed_file_size, 8+256*256*4+1);
+        TextReadBitbuffer in_bit(this->text, compressed_file_size, 8+256*256*4+1);
 
         uint64_t a = 0;
         uint64_t b = whole;
@@ -1102,91 +1102,3 @@ void Compression::AC2_reverse()
     }
 }
 
-
-Text_write_bitbuffer::Text_write_bitbuffer(std::string &output_string) {
-    this->text = &output_string;
-    bits_written=0;
-    clear();
-}
-
-
-Text_write_bitbuffer::~Text_write_bitbuffer() {
-    if ((bi != 0) or (bitcounter != 0)) flush();
-}
-
-
-void Text_write_bitbuffer::clear() {
-    for (auto &i : buffer) i = 0;
-    bi = 0;
-    bitcounter = 0;
-}
-
-
-void Text_write_bitbuffer::flush() {
-    if (bitcounter > 0) text->append( (char*)buffer, bi+1 );
-    else text->append( (char*)buffer, bi );
-    clear();
-}
-
-
-void Text_write_bitbuffer::add_bit_1() {
-    buffer[bi] <<= 1u;
-    ++buffer[bi];
-    bitcounter++;
-    bits_written++;
-
-    if ( bitcounter == 8 ) {
-        bi++;
-        bitcounter = 0;
-        if (bi >= 8*1024) flush();
-    }
-}
-
-
-void Text_write_bitbuffer::add_bit_0() {
-    buffer[bi] <<= 1u;
-    bitcounter++;
-    bits_written++;
-
-    if ( bitcounter == 8 ) {
-        bi++;
-        bitcounter = 0;
-        if (bi >= 8*1024) flush();
-    }
-}
-
-
-uint64_t Text_write_bitbuffer::get_output_size() const {
-    return bits_written;
-}
-
-
-Text_read_bitbuffer::Text_read_bitbuffer(uint8_t compressed_text[], uint64_t compressed_size, uint64_t starting_position) {
-    this->text = compressed_text;
-    this->byte_index = starting_position;
-    this->data_left_b = starting_position + ceil((double)compressed_size/8.0);
-
-    this->output_bit = false;
-
-    this->bits_in_last_byte = compressed_size % 8;
-    if (compressed_size > 8) this->meaningful_bits = 8;
-    else this->meaningful_bits = compressed_size;
-    this->bitcounter = 0;
-
-}
-
-
-bool Text_read_bitbuffer::getbit() {
-    output_bit = (text[byte_index] >> (meaningful_bits-bitcounter-1u)) & 1u; // probably not finished yet
-
-    bitcounter++;
-    if(bitcounter == 8) {
-        bitcounter = 0;
-        byte_index++;
-        if (byte_index == data_left_b-1) {
-            if (bits_in_last_byte != 0) meaningful_bits = bits_in_last_byte;
-            else meaningful_bits = 8;
-        }
-    }
-    return output_bit;
-}

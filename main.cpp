@@ -1,12 +1,12 @@
 #include <QApplication>
 
-#include "mainwindow.h"
+#include "archive_window.h"
 
 
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
-    MainWindow w;
+    ArchiveWindow w;
 
     w.show();
     return a.exec();

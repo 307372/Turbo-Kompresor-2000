@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>MainWindow</class>
- <widget class="QMainWindow" name="MainWindow">
+ <class>ArchiveWindow</class>
+ <widget class="QMainWindow" name="ArchiveWindow">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -112,18 +112,18 @@
     <property name="title">
      <string>Files</string>
     </property>
-    <addaction name="actionNew_archive"/>
-    <addaction name="actionOpen_archive"/>
+    <addaction name="actionNewArchive"/>
+    <addaction name="actionOpenArchive"/>
    </widget>
    <addaction name="menuFiles"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
-  <action name="actionNew_archive">
+  <action name="actionNewArchive">
    <property name="text">
     <string>New</string>
    </property>
   </action>
-  <action name="actionOpen_archive">
+  <action name="actionOpenArchive">
    <property name="text">
     <string>Open</string>
    </property>

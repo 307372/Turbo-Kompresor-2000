@@ -1,5 +1,6 @@
-#ifndef EXPERIMENTAL_PROJECT_EXCEPTIONS_H
-#define EXPERIMENTAL_PROJECT_EXCEPTIONS_H
+#ifndef PROJECT_EXCEPTIONS_H
+#define PROJECT_EXCEPTIONS_H
+
 #include <exception>
 #include <string>
 

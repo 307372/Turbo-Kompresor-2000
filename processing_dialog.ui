@@ -17,7 +17,7 @@
    <item>
     <widget class="QStackedWidget" name="stackedWidget">
      <property name="currentIndex">
-      <number>0</number>
+      <number>2</number>
      </property>
      <widget class="QWidget" name="page_compression_progress">
       <layout class="QVBoxLayout" name="verticalLayout">
@@ -315,6 +315,9 @@
             </property>
             <property name="text">
              <string>Extract just files</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
             </property>
            </widget>
           </item>

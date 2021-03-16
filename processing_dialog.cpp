@@ -1,64 +1,63 @@
-#include "processingdialog.h"
-#include "ui_mydialog.h"
+#include "processing_dialog.h"
+
 #include <cassert>
 
+#include "ui_processing_dialog.h"
+#include "misc/processing_helpers.h"
+#include "misc/custom_tree_widget_items.h"
 
 ProcessingDialog::ProcessingDialog(QWidget *parent) :
     QDialog(parent),
-    ui(new Ui::ProcessingDialog)
+    ui(new Ui::ProcessingDialog),
+    parent_mw(reinterpret_cast<ArchiveWindow*>(parent)),
+    twfolder_ptr(nullptr),
+    twfile_ptr(nullptr),
+    parent_usertype(-1)
 {
     ui->setupUi(this);
     this->setModal(true);
-    parent_mw = reinterpret_cast<MainWindow*>(parent);
-
-    this->parent_usertype = -1;
-    this->twfolder_ptr = nullptr;
-    this->twfile_ptr = nullptr;
 }
 
 
 ProcessingDialog::ProcessingDialog(TreeWidgetFolder* twfolder, QStringList file_path_list, QWidget *parent) :
     QDialog(parent),
-    ui(new Ui::ProcessingDialog)
+    ui(new Ui::ProcessingDialog),
+    parent_mw(reinterpret_cast<ArchiveWindow*>(parent)),
+    twfolder_ptr(twfolder),
+    twfile_ptr(nullptr),
+    parent_usertype(1001),
+    paths_to_files(file_path_list)
 {
     ui->setupUi(this);
     this->setModal(true);
-    parent_mw = reinterpret_cast<MainWindow*>(parent);
-
-    this->parent_usertype = 1001;
-    this->twfolder_ptr = twfolder;
-    this->twfile_ptr = nullptr;
-    this->paths_to_files = file_path_list;
 }
 
 
 ProcessingDialog::ProcessingDialog(TreeWidgetFile* twfile, QStringList file_path_list, QWidget *parent) :
     QDialog(parent),
-    ui(new Ui::ProcessingDialog)
+    ui(new Ui::ProcessingDialog),
+    parent_mw(reinterpret_cast<ArchiveWindow*>(parent)),
+    twfolder_ptr(nullptr),
+    twfile_ptr(twfile),
+    parent_usertype(1002),
+    paths_to_files(file_path_list)
 {
     ui->setupUi(this);
     this->setModal(true);
-    parent_mw = reinterpret_cast<MainWindow*>(parent);
-
-    this->parent_usertype = 1002;
-    this->twfolder_ptr = nullptr;
-    this->twfile_ptr = twfile;
-    this->paths_to_files = file_path_list;
 }
 
 
 ProcessingDialog::ProcessingDialog(std::vector<QTreeWidgetItem*> extraction_targets, QWidget *parent) :
     QDialog(parent),
-    ui(new Ui::ProcessingDialog)
+    ui(new Ui::ProcessingDialog),
+    parent_mw(reinterpret_cast<ArchiveWindow*>(parent)),
+    twfolder_ptr(nullptr),
+    twfile_ptr(nullptr),
+    parent_usertype(997),       // should never be used
+    extraction_targets(extraction_targets)
 {
-    this->extraction_targets = extraction_targets;
     ui->setupUi(this);
     this->setModal(true);
-    parent_mw = reinterpret_cast<MainWindow*>(parent);
-
-    this->parent_usertype = 997;    // should never be used
-    this->twfolder_ptr = nullptr;
-    this->twfile_ptr = nullptr;
 }
 
 
@@ -191,12 +190,12 @@ void ProcessingDialog::on_pushButton_abort_clicked()
 }
 
 
-void ProcessingDialog::correct_duplicate_names(file* target_file, folder* parent_folder)
+void ProcessingDialog::correct_duplicate_names(File* target_file, Folder* parent_folder)
 {
     std::vector<std::string> name_list;
     if (parent_folder->child_file_ptr == nullptr) return;
     else {
-        file* file_in_dir = parent_folder->child_file_ptr.get();
+        File* file_in_dir = parent_folder->child_file_ptr.get();
         name_list.push_back(file_in_dir->name);
 
         while (file_in_dir->sibling_ptr != nullptr)
@@ -257,18 +256,18 @@ void ProcessingDialog::on_pushButton_compress_clicked()
     ui->stackedWidget->setCurrentIndex(0);
 
     uint16_t flags = this->get_flags();
-    std::vector<file*> list_of_files;
+    std::vector<File*> list_of_files;
 
     if (parent_usertype == 1001) {  // TreeWidgetFolder
         for (auto &file_path : paths_to_files) {
-            file* new_file_ptr = twfolder_ptr->archive_ptr->add_file_to_archive_model( *(twfolder_ptr->folder_ptr), file_path.toStdString(), flags );
+            File* new_file_ptr = twfolder_ptr->archive_ptr->add_file_to_archive_model( *(twfolder_ptr->folder_ptr), file_path.toStdString(), flags );
             correct_duplicate_names(new_file_ptr, twfolder_ptr->folder_ptr);
             list_of_files.push_back( new_file_ptr );
         }
     }
     else if (parent_usertype == 1002) { // TreeWidgetFile
         for (auto &file_path : paths_to_files) {
-            file* new_file_ptr = twfile_ptr->archive_ptr->add_file_to_archive_model( *(twfile_ptr->file_ptr->parent_ptr), file_path.toStdString(), flags );
+            File* new_file_ptr = twfile_ptr->archive_ptr->add_file_to_archive_model( *(twfile_ptr->file_ptr->parent_ptr), file_path.toStdString(), flags );
             correct_duplicate_names(new_file_ptr, twfile_ptr->file_ptr->parent_ptr);
             list_of_files.push_back( new_file_ptr );
         }
@@ -276,18 +275,18 @@ void ProcessingDialog::on_pushButton_compress_clicked()
     else assert(false); // should never happen
 
     progress_step_value = 0;
-    th_compression = new compression_object( list_of_files, &progress_step_value, &progressBarStepMax, parent_mw->temp_path );
+    th_compression = new CompressionObject( list_of_files, &progress_step_value, &progressBarStepMax, parent_mw->temp_path );
     my_thread = new QThread;
     th_compression->moveToThread(my_thread);
 
-    connect( my_thread, &QThread::started , th_compression, &compression_object::start_processing );
-    connect( th_compression, &compression_object::ProgressNextFile, ui->progressBarTotal, &QProgressBar::setValue );
-    connect( th_compression, &compression_object::ProgressNextStep, ui->progressBarFile,  &QProgressBar::setValue );
-    connect( th_compression, &compression_object::setFilePathLabel, ui->label_currentfile_value, &QLabel::setText );
-    connect( th_compression, &compression_object::processing_finished, this,    &ProcessingDialog::slot_processing_finished );
-    connect( this, &ProcessingDialog::abort_processing, th_compression, &compression_object::abort_processing, Qt::ConnectionType::DirectConnection );
-    connect( th_compression, &compression_object::displayFailedFiles, this, &ProcessingDialog::displayFailedFiles );
-    startProcessingTimer();
+    connect( my_thread, &QThread::started , th_compression, &CompressionObject::startProcessing );
+    connect( th_compression, &CompressionObject::progressNextFile, ui->progressBarTotal, &QProgressBar::setValue );
+    connect( th_compression, &CompressionObject::progressNextStep, ui->progressBarFile,  &QProgressBar::setValue );
+    connect( th_compression, &CompressionObject::setFilePathLabel, ui->label_currentfile_value, &QLabel::setText );
+    connect( th_compression, &CompressionObject::processingFinished, this,    &ProcessingDialog::slot_processing_finished );
+    connect( this, &ProcessingDialog::abort_processing, th_compression, &CompressionObject::abortProcessing, Qt::ConnectionType::DirectConnection );
+    connect( th_compression, &CompressionObject::displayFailedFiles, this, &ProcessingDialog::displayFailedFiles );
+    start_processing_timer();
     my_thread->start();
 }
 
@@ -347,8 +346,8 @@ void ProcessingDialog::on_buttonDecompressionStart_clicked()
     std::filesystem::path target_path = ui->lineEdit_decompression_path->text().toStdString();
 
 
-    std::vector<folder*> folders;
-    std::vector<file*> files;
+    std::vector<Folder*> folders;
+    std::vector<File*> files;
 
     for (uint32_t i=0; i < extraction_targets.size(); ++i) {
         if ( extraction_targets[i]->type() == 1001 ) {
@@ -379,6 +378,16 @@ void ProcessingDialog::on_buttonDecompressionStart_clicked()
         // needs to be done after getting a vector of files for extraction,
         // since extraction_targets is a vector ordered by when elements were selected, and not by how deep is the file in the structure
 
+        for (auto single_file : files)  // marking every parent folder of every selected file to also be created
+        {
+            Folder* nth_parent = single_file->parent_ptr;
+            while (nth_parent)
+            {
+                nth_parent->ptr_already_gotten = true;
+                nth_parent = nth_parent->parent_ptr;
+            }
+        }
+
         parent_mw->archive_ptr->root_folder->set_path( target_path, true );
         // creating all necessary folders
         for (auto single_folder : folders) std::filesystem::create_directories( single_folder->path );
@@ -390,21 +399,21 @@ void ProcessingDialog::on_buttonDecompressionStart_clicked()
     for (auto single_file   : files  ) single_file->ptr_already_gotten = false;
 
     progress_step_value = 0;
-    th_decompression = new decompression_object( files, parent_mw->archive_ptr->archive_file, confirm_integrity, &progress_step_value, &progressBarStepMax );
+    th_decompression = new DecompressionObject( files, parent_mw->archive_ptr->archive_file, confirm_integrity, &progress_step_value, &progressBarStepMax );
 
     my_thread = new QThread;
     th_decompression->moveToThread( my_thread );
 
 
-    connect( my_thread, &QThread::started , th_decompression, &decompression_object::start_processing );
-    connect( th_decompression, &decompression_object::ProgressNextFile, ui->progressBarTotal, &QProgressBar::setValue );
-    connect( th_decompression, &decompression_object::ProgressNextStep, ui->progressBarFile,  &QProgressBar::setValue );
-    connect( th_decompression, &decompression_object::setFilePathLabel, ui->label_currentfile_value, &QLabel::setText );
-    connect( th_decompression, &decompression_object::processing_finished, this,    &ProcessingDialog::slot_processing_finished );
-    connect( this, &ProcessingDialog::abort_processing, th_decompression, &decompression_object::abort_processing, Qt::ConnectionType::DirectConnection );
-    connect( th_decompression, &decompression_object::displayFailedFiles, this, &ProcessingDialog::displayFailedFiles );
+    connect( my_thread, &QThread::started , th_decompression, &DecompressionObject::startProcessing );
+    connect( th_decompression, &DecompressionObject::ProgressNextFile, ui->progressBarTotal, &QProgressBar::setValue );
+    connect( th_decompression, &DecompressionObject::ProgressNextStep, ui->progressBarFile,  &QProgressBar::setValue );
+    connect( th_decompression, &DecompressionObject::setFilePathLabel, ui->label_currentfile_value, &QLabel::setText );
+    connect( th_decompression, &DecompressionObject::processingFinished, this,    &ProcessingDialog::slot_processing_finished );
+    connect( this, &ProcessingDialog::abort_processing, th_decompression, &DecompressionObject::abortProcessing, Qt::ConnectionType::DirectConnection );
+    connect( th_decompression, &DecompressionObject::displayFailedFiles, this, &ProcessingDialog::displayFailedFiles );
 
-    startProcessingTimer();
+    start_processing_timer();
     my_thread->start();
 }
 
@@ -436,7 +445,7 @@ void ProcessingDialog::on_buttonFinish_clicked()
 }
 
 
-void ProcessingDialog::startProcessingTimer() {
+void ProcessingDialog::start_processing_timer() {
     time_start = std::chrono::high_resolution_clock::now();
     timer_elapsed_time = new QTimer(this);
     connect( timer_elapsed_time, &QTimer::timeout, this, &ProcessingDialog::onTimerTimeout );
@@ -484,123 +493,3 @@ void ProcessingDialog::on_button_decompression_path_dialog_clicked()
     ui->lineEdit_decompression_path->setText(path_to_folder);
 }
 
-
-
-compression_object::compression_object(std::vector<file*> given_file_list, uint16_t* progress_ptr, uint32_t* progressBarStepMax, std::filesystem::path tmp_path) : QObject(nullptr)
-{
-    temp_path = tmp_path;
-    this->file_list = given_file_list;
-    this->aborting_variable = false;
-    this->progress_step = progress_ptr;
-    this->progressBarStepMax = progressBarStepMax;
-}
-
-
-compression_object::~compression_object() {
-    if (temp_output.is_open()) temp_output.close();
-}
-
-
-void compression_object::start_processing() {
-
-    this->temp_output.open(temp_path, std::ios::binary | std::ios::in | std::ios::out);
-    assert( temp_output.is_open() );
-    start();
-}
-
-
-void compression_object::abort_processing() {
-    aborting_variable = true;
-}
-
-
-void compression_object::start() {
-    emit ProgressNextFile(0);
-    emit ProgressNextStep(0);
-
-    QStringList failed_files;
-
-    uint16_t i=0;
-    for (; i < file_list.size(); ++i)
-    {
-        emit setFilePathLabel( file_list[i]->path.data() );
-
-        *progress_step = 0;
-        std::bitset<16> bin_flags(file_list[i]->flags_value);
-        *progressBarStepMax = ceil((double)std::filesystem::file_size(file_list[i]->path) / (double)((1ull << 24)-1))*bin_flags.count();
-
-        bool successful = false;
-        if (!aborting_variable) successful = file_list[i]->append_to_archive( temp_output, aborting_variable, false, progress_step );
-
-        if (!successful) failed_files.append(QString::fromStdString(file_list[i]->path));
-        emit ProgressNextFile((1.0+i)/(double)file_list.size()*100.0);
-    }
-
-    emit ProgressNextStep(100);
-    emit processing_finished( !aborting_variable and failed_files.empty() );
-    if (!failed_files.empty()) emit displayFailedFiles(failed_files);
-
-    QThread::currentThread()->quit();
-}
-
-
-
-decompression_object::decompression_object( std::vector<file*> file_list, std::fstream& source, bool validate_integrity, uint16_t* progress_ptr, uint32_t* progressBarStepMax ) : QObject(nullptr)
-{
-    this->file_list = file_list;
-    this->source_stream = &source;
-    this->aborting_variable = false;
-    this->validate_integrity = validate_integrity;
-    this->progress_step = progress_ptr;
-    this->progressBarStepMax = progressBarStepMax;
-}
-
-
-decompression_object::~decompression_object() {
-}
-
-
-void decompression_object::start_processing() {
-    start();
-}
-
-
-void decompression_object::abort_processing() {
-    aborting_variable = true;
-}
-
-
-void decompression_object::start()
-{
-    emit ProgressNextFile(0);
-    emit ProgressNextStep(0);
-
-    QStringList failed_files;
-
-    for (uint16_t i=0; i < file_list.size(); ++i)
-    {
-        emit ProgressNextStep(0);
-
-        *progress_step = 0;
-        std::bitset<16> bin_flags(file_list[i]->flags_value);
-
-        *progressBarStepMax = ceill((long double)file_list[i]->original_size / (long double)((1ull << 24)-1))*bin_flags.count();
-
-        std::filesystem::path label_path = file_list[i]->path;
-        label_path.append( file_list[i]->name );
-        emit setFilePathLabel( label_path.c_str() );
-
-        bool successful = false;
-
-        if (!aborting_variable) successful = file_list[i]->unpack( file_list[i]->path, *source_stream, aborting_variable, false, validate_integrity, progress_step );
-        if (!successful) failed_files.append(QString::fromStdString(file_list[i]->path + '/' +file_list[i]->name));
-
-        emit ProgressNextFile((1.0+i)/(double)file_list.size()*100.0);
-    }
-
-    emit ProgressNextStep(100);
-    emit processing_finished( !aborting_variable and failed_files.empty() );
-
-    if (!failed_files.empty()) emit displayFailedFiles(failed_files);
-    QThread::currentThread()->quit();
-}

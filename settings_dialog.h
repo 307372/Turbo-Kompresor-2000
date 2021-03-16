@@ -1,9 +1,10 @@
-#ifndef SETTINGSDIALOG_H
-#define SETTINGSDIALOG_H
+#ifndef SETTINGS_DIALOG_H
+#define SETTINGS_DIALOG_H
 
 #include <QDialog>
+
 #include "config.h"
-#include "mainwindow.h"
+#include "archive_window.h"
 
 
 namespace Ui {
@@ -16,7 +17,7 @@ class SettingsDialog : public QDialog
     Q_OBJECT
 
 public: 
-    explicit SettingsDialog( MainWindow* mw_ptr, QWidget *parent = nullptr );
+    explicit SettingsDialog( ArchiveWindow* mw_ptr, QWidget *parent = nullptr );
     ~SettingsDialog();
 
 signals:
@@ -32,7 +33,7 @@ private slots:
 private:
     Ui::SettingsDialog *ui;
     Config* config_ptr = nullptr;
-    MainWindow* mw_ptr = nullptr;
+    ArchiveWindow* mw_ptr = nullptr;
 };
 
 #endif // SETTINGSDIALOG_H
