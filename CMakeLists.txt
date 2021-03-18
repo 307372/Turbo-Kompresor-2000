@@ -48,9 +48,11 @@ add_executable(Turbo-Kompresor-2000
 
   misc/statistics.h
 
-  resources.qrc
+  misc/models.h
 
-  breeze.qrc
+  resources/icons/icons.qrc
+
+  resources/breeze/breeze.qrc
 )
 #[[qdiag]]
 target_link_libraries(Turbo-Kompresor-2000 PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Concurrent "${divsufsort_lib}" Threads::Threads)#  Qt6::Concurrent )

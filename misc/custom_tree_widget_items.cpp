@@ -10,7 +10,7 @@ TreeWidgetFolder::TreeWidgetFolder(QTreeWidgetItem *parent, Folder* ptr_to_folde
 {
     this->folder_ptr = ptr_to_folder;
     this->archive_ptr = ptr_to_archive;
-    this->setIcon(0, *(new QIcon(":/img/folder.png")));
+    this->setIcon(0, *(new QIcon(":/folder.png")));
 
     if (ptr_to_folder->sibling_ptr) parent->addChild( new TreeWidgetFolder( parent, ptr_to_folder->sibling_ptr.get(), ptr_to_archive, filesize_scaled ) );
     if (ptr_to_folder->child_dir_ptr) this->addChild( new TreeWidgetFolder( this, ptr_to_folder->child_dir_ptr.get(), ptr_to_archive, filesize_scaled ) );
@@ -24,7 +24,7 @@ TreeWidgetFolder::TreeWidgetFolder(TreeWidgetFolder *parent, Folder* ptr_to_fold
 {
     this->folder_ptr = ptr_to_folder;
     this->archive_ptr = ptr_to_archive;
-    this->setIcon(0, *(new QIcon(":/img/folder.png")));
+    this->setIcon(0, *(new QIcon(":/folder.png")));
 
 
     if (ptr_to_folder->sibling_ptr) parent->addChild( new TreeWidgetFolder( parent, ptr_to_folder->sibling_ptr.get(), ptr_to_archive, filesize_scaled ) );
@@ -66,7 +66,7 @@ TreeWidgetFile::TreeWidgetFile(TreeWidgetFolder *parent, File* ptr_to_file, Arch
     this->setTextAlignment(3, Qt::AlignRight);
     this->file_ptr = ptr_to_file;
     this->archive_ptr = ptr_to_archive;
-    this->setIcon(0, *(new QIcon(":/img/file.png")));
+    this->setIcon(0, *(new QIcon(":/file.png")));
     if (ptr_to_file->sibling_ptr) parent->addChild( new TreeWidgetFile( parent, ptr_to_file->sibling_ptr.get(), ptr_to_archive, filesize_scaled ) );
 }
 

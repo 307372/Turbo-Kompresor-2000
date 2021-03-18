@@ -1,8 +1,0 @@
-<RCC>
-    <qresource prefix="/home/pc/repos/Turbo-Kompresor-2000/img"/>
-    <qresource prefix="/">
-        <file>img/folder.png</file>
-        <file>img/file.png</file>
-        <file>img/archive.png</file>
-    </qresource>
-</RCC>

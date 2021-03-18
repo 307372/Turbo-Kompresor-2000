@@ -15,7 +15,7 @@ ArchiveWindow::ArchiveWindow(QWidget *parent)
     , config_ptr(new Config())
 {
     ui->setupUi(this);
-    this->setWindowIcon( *(new QIcon(":/img/archive.png")));
+    this->setWindowIcon( *(new QIcon(":/archive.png")));
 
     ui->archiveWidget->setColumnWidth(0, 300);
     ui->archiveWidget->setSelectionMode( QAbstractItemView::SelectionMode::ExtendedSelection );
