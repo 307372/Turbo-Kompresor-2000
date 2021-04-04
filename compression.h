@@ -22,8 +22,11 @@ public:
     void load_part( std::fstream &input, uint64_t text_size, uint32_t part_num, uint32_t block_size );
     void save_text( std::fstream &output );
 
-    void BWT_make();    // Burrows-Wheeler transform
+    void BWT_make();    // Burrows-Wheeler transform (DC3)
     void BWT_reverse();
+
+    void BWT_make2();   // Burrows-Wheeler transform (divsufsort)
+    void BWT_reverse2();
 
     void MTF_make();    // move-to-front
     void MTF_reverse();
