@@ -46,9 +46,9 @@ add_executable(Turbo-Kompresor-2000
 
   misc/multithreading.h
 
-  misc/statistics.h
+  misc/model.h
 
-  misc/models.h
+  misc/dc3.h
 
   resources/icons/icons.qrc
 

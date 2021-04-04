@@ -10,7 +10,8 @@
 #include <divsufsort.h> // external library
 
 #include "misc/bitbuffer.h"
-#include "misc/statistics.h"
+#include "misc/model.h"
+#include "misc/dc3.h"
 
 
 Compression::Compression( bool& aborting_variable ) :
@@ -60,6 +61,127 @@ void Compression::save_text( std::fstream &output ) {
 
 
 void Compression::BWT_make()
+{
+    if (!*aborting_var) {
+        uint64_t n = this->size;
+        assert(this->size > 0);
+
+        // Generating suffix array (SA)
+        uint32_t* SA = nullptr;
+        dc3::BWT_DC3(text, SA, n, 0xFF);
+
+        if (*aborting_var) {
+            delete[] SA;
+            return;
+        }
+
+        auto encoded = new uint8_t[n+1+4](); // +1 byte due to appending EOF during DC3
+        // +4 bytes for adding uint32 EOF position during decoding at the end of encoded text
+
+        uint32_t original_message_index = 0;
+        for (uint32_t i=0; i < n+1 and !*aborting_var; ++i)
+        {
+            int32_t ending = SA[i]-1;
+            if (ending == -1) {
+                original_message_index = i; // this is where EOF would go, but we're using it only in logic
+                ending = 0;        // so we change it to something that's within the text, for future compression steps
+            }
+            encoded[i] = this->text[ending];
+        }
+
+        delete[] SA;
+
+        if (*aborting_var) {
+            delete[] encoded;
+            return;
+        }
+
+        // appending encoded text with EOF position
+        for (uint8_t index=0; index < 4 and !*aborting_var; ++index)
+            encoded[n+1+index] = ( original_message_index >> (index*8u)) & 0xFFu;
+
+        // replacing this->text with encoded text
+        std::swap(this->text, encoded);
+        delete[] encoded;
+        this->size = n+5;
+    }
+}
+
+
+void Compression::BWT_reverse()
+{   // Using L-F mapping
+    if (!*aborting_var) {
+        uint32_t encoded_length = this->size-4; // subtracting 4 bits due to 4 last bits being starting position
+
+        // read EOF position from last 4 bits
+        uint32_t eof_position = ((uint32_t)this->text[encoded_length]) | ((uint32_t)this->text[encoded_length+1]<<8u) | ((uint32_t)this->text[encoded_length+2]<<16u) | ((uint32_t)this->text[encoded_length+3]<<24u);
+
+        // constructing counter of sign occurrences
+        uint32_t SC[256];
+        for (auto & i : SC) i = 0;
+
+
+        // tells us how many letters letters 'x' occurred before text[x]
+        auto enumeration = new uint32_t [encoded_length]();
+
+        for (uint32_t i=0; i < eof_position and !*aborting_var; ++i) {
+            enumeration[i] = SC[this->text[i]];
+            SC[this->text[i]]++;
+        }
+        // skipping EOF
+        for (uint32_t i=eof_position+1; i < encoded_length and !*aborting_var; ++i) {
+            enumeration[i] = SC[this->text[i]];
+            SC[this->text[i]]++;
+        }
+
+
+        if (*aborting_var) {
+            delete[] enumeration;
+            return;
+        }
+
+
+        uint64_t sumSC[256];   // tells you where first occurence of given char would be in sorted order
+        sumSC[0] = 1;          // before char(0), there was EOF (in logic, not in memory, but we need to skip it anyway)
+        for (uint16_t i=1; i < 256; ++i) sumSC[i] = sumSC[i-1] + SC[i-1];
+
+        uint32_t decoded_length = encoded_length-1;
+        auto decoded = new uint8_t [decoded_length]();
+
+
+        if (*aborting_var) {
+            delete[] enumeration;
+            delete[] decoded;
+            return;
+        }
+
+        decoded[decoded_length-1] = this->text[0];
+        uint32_t next_sign_index = 0;
+
+        for (uint32_t i=1; i < decoded_length and !*aborting_var; ++i ) { // starts from 1, because we already decoded first sign above
+
+            uint8_t previous_sign = this->text[next_sign_index];
+            next_sign_index = sumSC[previous_sign] + enumeration[next_sign_index];
+
+            decoded[decoded_length-i-1] = this->text[next_sign_index];
+        }
+
+        delete[] enumeration;
+
+        if (*aborting_var) {
+            delete[] decoded;
+            return;
+        }
+
+        // replacing encoded text with decoded
+        std::swap(this->text, decoded);
+        delete[] decoded;
+        this->size = decoded_length;
+    }
+}
+
+
+void Compression::BWT_make2()
 {
     if (!*aborting_var) {
         uint64_t n = this->size;
@@ -141,7 +263,7 @@ void Compression::BWT_make()
 }
 
 
-void Compression::BWT_reverse()
+void Compression::BWT_reverse2()
 {   // Using L-F mapping
 
     if (!*aborting_var) {

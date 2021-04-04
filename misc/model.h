@@ -1,5 +1,6 @@
-#ifndef STATISTICS_H
-#define STATISTICS_H
+#ifndef MODELS_H
+#define MODELS_H
+
 
 #include <climits>
 #include <cmath>
@@ -100,4 +101,5 @@ std::vector<uint64_t> memoryless( uint8_t text[], uint32_t text_size )
 
 }
 
-#endif
+
+#endif // MODELS_H

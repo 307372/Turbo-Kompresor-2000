@@ -121,6 +121,8 @@ uint16_t ProcessingDialog::get_flags() {
     flags[1] = ui->checkBox_MTF->isChecked();
     flags[2] = ui->checkBox_RLE->isChecked();
 
+    flags[9] = true;        // 8 mb blocks
+
     switch (ui->comboBox_entropy_coding->currentIndex()) {
     case 0:     // None
         break;
