@@ -23,8 +23,11 @@ Do sprawdzania poprawności działania, zastosowałem:
 - Mam zamiar dodać AES i jeszcze jakiś inny algorytm szyfrowania, jak również zastąpić libdivsufsort moim kodem i dodać rANS.
 
 ## 5. Harmonogram pracy
+Zrobione:
 - 16.03.2021 - Przygotowanie kodu do tego projektu - refaktoryzacja
 - 01.04.2021 - Implementacja DC3 / Skew lub innego algorytmu generowania suffix array działającego w O(n) i opracowanie wersji transformaty Burrowsa-Wheelera niewymagającej podwojenia danych wejściowych do poprawnego działania
+
+Do zrobienia:
 - 15.04.2021 - Implementacja AES
 - 22.04.2021 - Modyfikacje pozwalające na zaszyfrowanie i odszyfrowanie pliku z poziomu GUI
 - 20.05.2021 - Implementacja ranged Asymmetric Numeral Systems (rANS)
