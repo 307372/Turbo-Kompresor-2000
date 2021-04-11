@@ -11,6 +11,8 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+add_compile_options(-Wall;-msse2;-msse;-maes)
+
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Widgets Concurrent REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets Concurrent REQUIRED)
 find_package(Threads)
@@ -49,6 +51,8 @@ add_executable(Turbo-Kompresor-2000
   misc/model.h
 
   misc/dc3.h
+
+  misc/aes_functions.h
 
   resources/icons/icons.qrc
 
