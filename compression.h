@@ -42,6 +42,9 @@ public:
 
     void AC2_make();    // arithmetic coding (first-order Markov model)
     void AC2_reverse();
+
+    void AES128_make(uint8_t key[], uint8_t iv[]);
+    void AES128_reverse(uint8_t key[]);
 };
 
 #endif //COMPRESSION_DEV_COMPRESSION_H

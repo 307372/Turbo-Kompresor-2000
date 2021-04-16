@@ -6,18 +6,19 @@
 #include <cmath>
 #include <cassert>
 #include <vector>
+#include <wmmintrin.h>
 
 #include <divsufsort.h> // external library
 
+#include "misc/aes_functions.h"
 #include "misc/bitbuffer.h"
 #include "misc/model.h"
 #include "misc/dc3.h"
 
-
 Compression::Compression( bool& aborting_variable ) :
-    aborting_var(&aborting_variable)
-  , text(new uint8_t[0])
-  , size(0) {}
+        aborting_var(&aborting_variable)
+        , text(new uint8_t[0])
+        , size(0) {}
 
 
 Compression::~Compression() {
@@ -580,7 +581,7 @@ void Compression::RLE_makeV2()
         }
 
         if ( (output_chars.length() + output_run_length.length())*3 > this->size*2 ) {    // if RLE improves compression by less than 1/3 this-size bytes, then:
-             RLE_used = false;
+            RLE_used = false;
         }
 
         if( RLE_used ) {
@@ -1222,5 +1223,143 @@ void Compression::AC2_reverse()
 
         for (uint32_t j=0; j < this->size; ++j) this->text[j] = output[j];
     }
+}
+
+
+void Compression::AES128_make(uint8_t key[], uint8_t iv_char[])
+{
+    int64_t amount_of_blocks = ceill((long double)size / 16.0);    // calculating the amount of blocks of ciphertext
+    __m128i iv = *((__m128i*) iv_char);
+    __m128i round_keys[11] = {};
+    AES128_get_subkeys(key, round_keys);
+
+    uint64_t output_size = sizeof(iv) + size;  // we'll need to save initialization vector with encrypted data
+    auto* output = new uint8_t [output_size]();
+    _mm_storeu_si128((__m128i*)(output), iv);       // saving initialization vector to the beginning of the output
+
+
+    __m128i ctr = iv;   // counter
+    __m128i ctr_enc;    // encrypted counter
+    __m128i block;      // block of plaintext
+
+    for(uint64_t i=0; i < amount_of_blocks-1; ++i)
+    {
+        block = _mm_loadu_si128((__m128i*) (text+i*16));    // loading a block of plaintext
+
+        // in ctr (counter) mode, we'll encrypt counter and then xor it with plaintext to get ciphertext
+        ctr_enc = _mm_xor_si128(round_keys[0], ctr);    // xoring ctr with key
+
+        // 10 rounds of SubBytes, ShiftRows, MixColumns, AddRoundKey
+        for (uint32_t j=1; j <= 9; ++j) ctr_enc = _mm_aesenc_si128(ctr_enc, round_keys[j]);
+        ctr_enc = _mm_aesenclast_si128(ctr_enc, round_keys[10]);
+
+        block = _mm_xor_si128(block, ctr_enc);  // xoring block of data with encrypted counter
+
+        _mm_storeu_si128((__m128i*)(output+(i+1)*16), block);   // saving encrypted data offset by 1 block (1st one is the iv)
+
+        increment_128b(ctr, iv_char);
+    }
+
+    // processing last block
+    block = _mm_loadu_si128((__m128i*)(text+(amount_of_blocks-1)*16));
+    ctr_enc = _mm_xor_si128(round_keys[0], ctr);    // xoring ctr with key
+
+    // 10x SubBytes, ShiftRows, MixColumns, AddRoundKey
+    for (uint32_t j=1; j <= 9; ++j) ctr_enc = _mm_aesenc_si128(ctr_enc, round_keys[j]);
+    ctr_enc = _mm_aesenclast_si128(ctr_enc, round_keys[10]);
+
+    // xoring block of data with our encrypted counter will give us our ciphertext
+    block = _mm_xor_si128(block, ctr_enc);
+
+    // calculating how much data should be written
+    uint32_t reminder = size % 16;
+    if (reminder == 0) reminder = 16;
+
+    for (uint32_t i=0; i < reminder; ++i)
+    {
+        if (i < 8)
+        {
+            uint8_t val = ((block[0] >>(8*i)) & 0xFF);
+            output[size-reminder+i+16] = val;
+        }
+        else
+        {
+            uint8_t val = ((block[1] >>(8*(i-8))) & 0xFF);
+            output[size-reminder+i+16] = val;
+        }
+    }
+
+    _mm_empty();    // cleaning up MMX register
+
+    std::swap(text, output);
+    delete[] output;
+}
+
+
+void Compression::AES128_reverse( uint8_t key[] )
+{
+    int64_t amount_of_blocks = ceill((long double)size / 16.0);
+
+    __m128i round_keys[11] = {};
+    AES128_get_subkeys(key, round_keys);
+    __m128i iv = _mm_loadu_si128((__m128i*) text);
+
+    uint64_t output_size = size - sizeof(iv);  // we'll won't need IV in our plaintext
+    auto* output = new uint8_t [output_size]();
+    _mm_storeu_si128((__m128i*)(output), iv);
+
+    __m128i ctr = iv;
+    __m128i ctr_enc;
+    __m128i block;
+    for(uint64_t i=1; i < amount_of_blocks-1; ++i)  // -1 block, because if it's not 128b, then we'll go out of range
+    {
+        block = _mm_loadu_si128((__m128i*)(text+i*16)); // loading a block of ciphertext
+        // in ctr (counter) mode, we'll encrypt counter and then xor it with plaintext to get ciphertext
+        ctr_enc = _mm_xor_si128(round_keys[0], ctr);    // xoring ctr with key
+
+        // 10x SubBytes, ShiftRows, MixColumns, AddRoundKey
+        for (uint32_t j=1; j <= 9; ++j) ctr_enc = _mm_aesenc_si128(ctr_enc, round_keys[j]);
+        ctr_enc = _mm_aesenclast_si128(ctr_enc, round_keys[10]);
+
+        // xoring block of data with our encrypted counter will give us our ciphertext
+        block = _mm_xor_si128(block, ctr_enc);
+        _mm_storeu_si128((__m128i*)(output+(i-1)*16), block);    // saving plaintext, we're skipping 1st block of
+        // ciphertext, as it contained IV
+        increment_128b(ctr, text);   // first 16 bytes of text are IV
+    }
+
+    // processing last block
+    block = _mm_loadu_si128((__m128i*)(text+(amount_of_blocks-1)*16));
+    ctr_enc = _mm_xor_si128(round_keys[0], ctr);    // xoring ctr with key
+
+    // 10x SubBytes, ShiftRows, MixColumns, AddRoundKey
+    for (uint32_t j=1; j <= 9; ++j) ctr_enc = _mm_aesenc_si128(ctr_enc, round_keys[j]);
+    ctr_enc = _mm_aesenclast_si128(ctr_enc, round_keys[10]);
+
+    // xoring block of data with our encrypted counter will give us our ciphertext
+    block = _mm_xor_si128(block, ctr_enc);
+
+    // calculating how much data should be written
+    uint32_t reminder = size % 16;
+    if (reminder == 0) reminder = 16;
+
+    for (uint32_t i=0; i < reminder; ++i)
+    {
+        if (i < 8)
+        {
+            uint8_t val = ((block[0] >>(8*i)) & 0xFF);
+            output[size-reminder+i-16] = val;
+        }
+        else
+        {
+            uint8_t val = ((block[1] >>(8*(i-8))) & 0xFF);
+            output[size-reminder+i-16] = val;
+        }
+    }
+
+    _mm_empty();    // cleaning up MMX register
+
+    std::swap(text, output);
+    delete[] output;
 }
 
