@@ -5,11 +5,17 @@
 
 
 class IntegrityValidation {
-    std::string SHA1;
 public:
+    std::string SHA1;
+    std::string SHA256;
+
     IntegrityValidation();
     std::string get_SHA1_from_file( const std::string& path_to_file, bool& aborting_var );
     std::string get_SHA1_from_stream( std::fstream& source, uint64_t file_size, bool& aborting_var );
+
+    std::string get_SHA256_from_file(const std::string &path_to_file, bool &aborting_var);
+    std::string get_SHA256_from_stream( std::fstream& source, bool& aborting_var );
+    std::string get_SHA256_from_text( uint8_t text[], uint64_t text_size, bool& aborting_var );
 
     void generate_CRC32_lookup_table();
     std::string get_CRC32_from_text( uint8_t text[], uint64_t text_size, bool& aborting_var );
