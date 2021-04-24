@@ -6,10 +6,18 @@
 
 class IntegrityValidation {
 public:
+    // strings of hex chars
     std::string SHA1;
     std::string SHA256;
+    std::string CRC32;
+
+    // arrays of numbers
+    uint8_t* SHA1_num;      // 20 bytes
+    uint8_t* SHA256_num;    // 32 bytes
+    uint8_t* CRC32_num;     // 32 bytes
 
     IntegrityValidation();
+    ~IntegrityValidation();
     std::string get_SHA1_from_file( const std::string& path_to_file, bool& aborting_var );
     std::string get_SHA1_from_stream( std::fstream& source, uint64_t file_size, bool& aborting_var );
 

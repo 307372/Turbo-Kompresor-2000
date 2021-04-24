@@ -4,14 +4,20 @@
 #include <cassert>
 #include <vector>
 #include <filesystem>
-#include <climits>
-#include <bitset>
 #include <bit>
 #include <cmath>
+#include <sstream>
 
 
-IntegrityValidation::IntegrityValidation() {
+IntegrityValidation::IntegrityValidation()
+: SHA1_num(nullptr), SHA256_num(nullptr), CRC32_num(nullptr) {
     generate_CRC32_lookup_table();
+}
+
+IntegrityValidation::~IntegrityValidation() {
+    delete[] SHA1_num;
+    delete[] SHA256_num;
+    delete[] CRC32_num;
 }
 
 
@@ -431,6 +437,19 @@ std::string IntegrityValidation::get_SHA256_from_file(const std::string &path_to
 
         std::string sha256hex = stream.str();
         this->SHA256 = sha256hex;
+
+        delete[] SHA256_num;
+        SHA256_num = new uint8_t [8*4]();
+        uint32_t copied_ctr = 0;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h0 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h1 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h2 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h3 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h4 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h5 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h6 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h7 >> (24 - i * 8)) & 0xFF;
+
         return sha256hex;
     }
     return "";
@@ -594,6 +613,19 @@ std::string IntegrityValidation::get_SHA256_from_stream(std::fstream &target_fil
 
         std::string sha256hex = stream.str();
         this->SHA256 = sha256hex;
+
+        delete[] SHA256_num;
+        SHA256_num = new uint8_t [8*4]();
+        uint32_t copied_ctr = 0;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h0 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h1 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h2 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h3 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h4 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h5 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h6 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h7 >> (24 - i * 8)) & 0xFF;
+
         return sha256hex;
     }
     return "";
@@ -778,6 +810,20 @@ std::string IntegrityValidation::get_SHA256_from_text( uint8_t text[], uint64_t 
 
         std::string sha256hex = stream.str();
         this->SHA256 = sha256hex;
+
+        delete[] SHA256_num;
+        SHA256_num = new uint8_t [8*4]();
+        uint32_t copied_ctr = 0;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h0 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h1 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h2 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h3 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h4 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h5 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h6 >> (24 - i * 8)) & 0xFF;
+        for (uint32_t i=0; i < 4; ++i) SHA256_num[copied_ctr++] = (h7 >> (24 - i * 8)) & 0xFF;
+
+
         return sha256hex;
     }
     return "";
@@ -812,6 +858,7 @@ std::string IntegrityValidation::get_CRC32_from_text(uint8_t *text, uint64_t tex
         std::stringstream stream;
         stream << "0x" << std::hex << std::setw(8) << std::setfill('0') << ~crc32;
         std::string crc32_str = stream.str();
+        this->CRC32 = crc32_str;
         return crc32_str;
     }
     else return "";
@@ -841,6 +888,7 @@ std::string IntegrityValidation::get_CRC32_from_file( std::string path, bool& ab
         std::stringstream stream;
         stream << "0x" << std::hex << std::setw(8) << std::setfill('0') << ~crc32;
         std::string crc32_str = stream.str();
+        this->CRC32 = crc32_str;
         return crc32_str;
     }
     else return "";
@@ -875,7 +923,10 @@ std::string IntegrityValidation::get_CRC32_from_stream(std::fstream &source, boo
         std::stringstream stream;
         stream << "0x" << std::hex << std::setw(8) << std::setfill('0') << ~crc32;
         std::string crc32_str = stream.str();
+        this->CRC32 = crc32_str;
         return crc32_str;
     }
     else return "";
 }
+
+
