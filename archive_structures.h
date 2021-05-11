@@ -16,6 +16,7 @@ struct File;
 
 struct Folder
 {
+public:
     static const uint8_t base_metadata_size = 33;   // base metadata size (excluding name_size) (in bytes)
     uint64_t location=0;                            // absolute location of this folder in archive
 
@@ -61,6 +62,17 @@ struct Folder
 
 struct File
 {
+private:
+
+    bool encrypted = false;                         // tells us whether or not the file is encrypted
+    int  encryption = 0;                            // if encrypted == true, here here we'll find information about what cipher was used
+    bool locked = false;                            // file is locked if it's encrypted and the correct password hasn't been provided
+    std::basic_string<uint8_t> key;                 // if the file is encrypted and unlocked, the key will be here
+    std::basic_string<uint8_t> encryption_metadata; // metadata prepended to the encrypted file. Contains no secrets
+
+
+public:
+    enum encryption_types {None, AES_128};          // enum for int encryption
     static const uint8_t base_metadata_size = 43;   // base metadata size (excluding name_size) (in bytes)
     std::string path;
 
@@ -81,6 +93,8 @@ struct File
     uint64_t data_location=0;                       // location of data in archive (in bytes)
     uint64_t compressed_size=0;                     // size of compressed data (in bytes)
     uint64_t original_size=0;                       // size of data before compression (in bytes)
+
+    ~File();
 
     bool process_the_file(std::fstream &archive_stream, const std::string& path_to_destination, bool decode, bool& aborting_var,
                          bool validate_integrity = true, uint16_t* progress_ptr = nullptr );
@@ -107,6 +121,14 @@ struct File
     void get_ptrs( std::vector<File*>& files, bool get_siblings_too = false );
 
     void set_path( std::filesystem::path extraction_path, bool set_all_paths );
+
+    bool is_locked() const;
+
+    bool is_encrypted() const;
+
+    void prepare_for_encryption(std::string& pw, bool& aborting_var);
+
+    bool unlock(std::string& pw, std::fstream& archive_stream, bool& aborting_var);    // true = unlocked
 };
 
 #endif //EXPERIMENTAL_ARCHIVE_STRUCTURES_H

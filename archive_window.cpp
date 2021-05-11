@@ -290,7 +290,7 @@ void ArchiveWindow::add_new_folder_clicked()
 
         bool not_canceled = false;
 
-        QString folder_name =  QInputDialog::getText(this, "Name your folder", "Type folder's name here:", QLineEdit::Normal, QString(), &not_canceled);
+        QString folder_name = QInputDialog::getText(this, "Name your folder", "Type folder's name here:", QLineEdit::Normal, QString(), &not_canceled);
 
         if (not_canceled) {
             if (itm->type() == 1001) {  //TreeWidgetFolder
@@ -335,5 +335,54 @@ void ArchiveWindow::open_settings_dialog()
     sd->exec();
     if (current_archive_path != "") reload_archive();
 }
+
+
+
+void ArchiveWindow::on_archiveWidget_itemDoubleClicked(QTreeWidgetItem *item, int column)
+// If the file is encrypted and locked, it asks user to provide a password, and if it's the right one, unlocks the file
+{
+    if (item->type() == 1002)   // TreeWidgetFile
+    {
+        TreeWidgetFile* file_item = reinterpret_cast<TreeWidgetFile*>(item);
+        if (file_item->file_ptr->is_encrypted() and file_item->file_ptr->is_locked())
+        {
+            bool not_canceled;
+            QString password = QInputDialog::getText(this, "Unlocking file", "Password:", QLineEdit::Password, QString(), &not_canceled);
+
+            if (not not_canceled) return;
+            std::string pw(password.toStdString());
+
+            bool success = file_item->try_unlocking(pw);
+
+            if (success) {
+                std::cout << "success" << std::endl;
+            }
+            else {
+                std::cout << "fail" << std::endl;
+            }
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

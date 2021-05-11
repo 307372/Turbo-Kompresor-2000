@@ -117,11 +117,11 @@ void ProcessingDialog::closeEvent(QCloseEvent *event) {
 uint16_t ProcessingDialog::get_flags() {
 
     std::bitset<16> flags(0);
-    flags[0] = ui->checkBox_BWT->isChecked();
-    flags[1] = ui->checkBox_MTF->isChecked();
-    flags[2] = ui->checkBox_RLE->isChecked();
+    flags[0] = ui->checkBox_BWT->isChecked();   // Burrows-Wheeler transform
+    flags[1] = ui->checkBox_MTF->isChecked();   // Move-to-front
+    flags[2] = ui->checkBox_RLE->isChecked();   // Run-length encoding
 
-    flags[9] = true;        // 8 mb blocks
+
 
     switch (ui->comboBox_entropy_coding->currentIndex()) {
     case 0:     // None
@@ -135,6 +135,12 @@ uint16_t ProcessingDialog::get_flags() {
         flags[4] = true;
         break;
     }
+
+
+    flags[6] = (ui->groupBox_AES128->isChecked() and not ui->line_edit_AES128_password->text().isEmpty());  // AES-128
+    // Will only be done if password is provided and checkbox is checked
+
+    flags[9] = true;        // enforces 8 mb blocks
 
     switch (ui->comboBox_checksum->currentIndex()) {
     case 0:     // SHA-1
@@ -258,11 +264,22 @@ void ProcessingDialog::on_pushButton_compress_clicked()
     ui->stackedWidget->setCurrentIndex(0);
 
     uint16_t flags = this->get_flags();
+    std::bitset<16> bin_flags(flags);
+
     std::vector<File*> list_of_files;
 
     if (parent_usertype == 1001) {  // TreeWidgetFolder
         for (auto &file_path : paths_to_files) {
             File* new_file_ptr = twfolder_ptr->archive_ptr->add_file_to_archive_model( *(twfolder_ptr->folder_ptr), file_path.toStdString(), flags );
+
+            if (bin_flags[6])   // AES-128
+            {
+                // Preparing the file for encryption
+                std::string password = ui->line_edit_AES128_password->text().toStdString();
+                bool fake_aborting_var = false; // this shouldn't be interrupted
+                new_file_ptr->prepare_for_encryption(password, fake_aborting_var);
+            }
+
             correct_duplicate_names(new_file_ptr, twfolder_ptr->folder_ptr);
             list_of_files.push_back( new_file_ptr );
         }
@@ -270,6 +287,15 @@ void ProcessingDialog::on_pushButton_compress_clicked()
     else if (parent_usertype == 1002) { // TreeWidgetFile
         for (auto &file_path : paths_to_files) {
             File* new_file_ptr = twfile_ptr->archive_ptr->add_file_to_archive_model( *(twfile_ptr->file_ptr->parent_ptr), file_path.toStdString(), flags );
+
+            if (bin_flags[6])   // AES-128
+            {
+                // Preparing the file for encryption
+                std::string password = ui->line_edit_AES128_password->text().toStdString();
+                bool fake_aborting_var = false; // this shouldn't be interrupted
+                new_file_ptr->prepare_for_encryption(password, fake_aborting_var);
+            }
+
             correct_duplicate_names(new_file_ptr, twfile_ptr->file_ptr->parent_ptr);
             list_of_files.push_back( new_file_ptr );
         }

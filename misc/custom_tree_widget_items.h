@@ -32,6 +32,7 @@ public:
 
     void unpack( std::string path_for_extraction, bool& aborting_var );
     void set_disabled(bool disabled);
+    bool try_unlocking(std::string& pw);
     bool operator<(const QTreeWidgetItem &other)const;
 };
 

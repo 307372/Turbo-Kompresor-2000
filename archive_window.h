@@ -60,6 +60,7 @@ private slots:
     void open_settings_dialog();
 
     void remove_selected_clicked();
+    void on_archiveWidget_itemDoubleClicked(QTreeWidgetItem *item, int column);
 };
 
 #endif // MAINWINDOW_H
