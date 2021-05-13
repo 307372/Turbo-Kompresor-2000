@@ -43,7 +43,7 @@ void Compression::load_text( std::fstream &input, uint64_t text_size )
 void Compression::load_part(std::fstream &input, uint64_t text_size, uint32_t part_num, uint32_t block_size) {
     if (!*aborting_var) {
         delete[] this->text;
-        assert( block_size * part_num < text_size ); // part_size * part_num == starting position
+        assert( block_size * part_num <= text_size ); // part_size * part_num == starting position
 
         if (block_size * (part_num+1) < text_size ) this->size = block_size;
         else this->size = text_size - (block_size * part_num);

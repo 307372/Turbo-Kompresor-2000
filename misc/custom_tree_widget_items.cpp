@@ -10,7 +10,8 @@ TreeWidgetFolder::TreeWidgetFolder(QTreeWidgetItem *parent, Folder* ptr_to_folde
 {
     this->folder_ptr = ptr_to_folder;
     this->archive_ptr = ptr_to_archive;
-    this->setIcon(0, *(new QIcon(":/folder.png")));
+    this->FolderIcon = QIcon(":/folder.png");
+    this->setIcon(0, FolderIcon);
 
     if (ptr_to_folder->sibling_ptr) parent->addChild( new TreeWidgetFolder( parent, ptr_to_folder->sibling_ptr.get(), ptr_to_archive, filesize_scaled ) );
     if (ptr_to_folder->child_dir_ptr) this->addChild( new TreeWidgetFolder( this, ptr_to_folder->child_dir_ptr.get(), ptr_to_archive, filesize_scaled ) );
@@ -24,7 +25,9 @@ TreeWidgetFolder::TreeWidgetFolder(TreeWidgetFolder *parent, Folder* ptr_to_fold
 {
     this->folder_ptr = ptr_to_folder;
     this->archive_ptr = ptr_to_archive;
-    this->setIcon(0, *(new QIcon(":/folder.png")));
+
+    this->FolderIcon = QIcon(":/folder.png");
+    this->setIcon(0, FolderIcon);
 
 
     if (ptr_to_folder->sibling_ptr) parent->addChild( new TreeWidgetFolder( parent, ptr_to_folder->sibling_ptr.get(), ptr_to_archive, filesize_scaled ) );
@@ -68,11 +71,14 @@ TreeWidgetFile::TreeWidgetFile(TreeWidgetFolder *parent, File* ptr_to_file, Arch
     this->archive_ptr = ptr_to_archive;
 
     // checking if the file is encrypted, as locked files need lock icon
-    if (file_ptr->is_encrypted())
-        this->setIcon(0, *(new QIcon(":/locked.png")));
-    else
-        this->setIcon(0, *(new QIcon(":/file.png")));
-
+    if (file_ptr->is_encrypted()) {
+        this->FileIcon = QIcon(":/locked.png");
+        this->setIcon(0, FileIcon);
+    }
+    else {
+        this->FileIcon = QIcon(":/file.png");
+        this->setIcon(0, FileIcon);
+    }
     if (ptr_to_file->sibling_ptr) parent->addChild( new TreeWidgetFile( parent, ptr_to_file->sibling_ptr.get(), ptr_to_archive, filesize_scaled ) );
 }
 
@@ -84,7 +90,8 @@ bool TreeWidgetFile::try_unlocking(std::string& pw)
     bool success = this->file_ptr->unlock(pw, this->archive_ptr->archive_file, fake_aborting_var);
 
     if (success) {
-        this->setIcon(0, *(new QIcon(":/unlocked.png")));
+        this->FileIcon = QIcon(":/unlocked.png");
+        this->setIcon(0, FileIcon);
     }
 
     return success;

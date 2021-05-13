@@ -115,7 +115,6 @@ void ProcessingDialog::closeEvent(QCloseEvent *event) {
 
 
 uint16_t ProcessingDialog::get_flags() {
-
     std::bitset<16> flags(0);
     flags[0] = ui->checkBox_BWT->isChecked();   // Burrows-Wheeler transform
     flags[1] = ui->checkBox_MTF->isChecked();   // Move-to-front
@@ -508,6 +507,9 @@ void ProcessingDialog::onTimerTimeout() {
 
 
     ui->label_duration_value->setText( formatted_time );
+    if (progressBarStepMax == 0)
+        progressBarStepMax = 1;
+
     ui->progressBarFile->setValue( round(progress_step_value*100/progressBarStepMax) );
 }
 

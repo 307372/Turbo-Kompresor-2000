@@ -24,10 +24,12 @@ class ArchiveWindow : public QMainWindow
 
 private:
     Ui::ArchiveWindow *ui;
+    QIcon ArchiveIcon;
 
 public:
     ArchiveWindow(QWidget *parent = nullptr);
     ~ArchiveWindow();
+
     void new_archive_model();
     void create_empty_archive();
     void load_archive( std::string path_to_archive );
@@ -60,7 +62,8 @@ private slots:
     void open_settings_dialog();
 
     void remove_selected_clicked();
-    void on_archiveWidget_itemDoubleClicked(QTreeWidgetItem *item, int column);
+
+    void on_archiveWidget_itemSelectionChanged();
 };
 
 #endif // MAINWINDOW_H

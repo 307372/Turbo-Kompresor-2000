@@ -15,7 +15,8 @@ ArchiveWindow::ArchiveWindow(QWidget *parent)
     , config_ptr(new Config())
 {
     ui->setupUi(this);
-    this->setWindowIcon( *(new QIcon(":/archive.png")));
+    this->ArchiveIcon = QIcon(":/archive.png");
+    this->setWindowIcon(ArchiveIcon);
 
     ui->archiveWidget->setColumnWidth(0, 300);
     ui->archiveWidget->setSelectionMode( QAbstractItemView::SelectionMode::ExtendedSelection );
@@ -338,51 +339,32 @@ void ArchiveWindow::open_settings_dialog()
 
 
 
-void ArchiveWindow::on_archiveWidget_itemDoubleClicked(QTreeWidgetItem *item, int column)
-// If the file is encrypted and locked, it asks user to provide a password, and if it's the right one, unlocks the file
+void ArchiveWindow::on_archiveWidget_itemSelectionChanged()
 {
-    if (item->type() == 1002)   // TreeWidgetFile
-    {
-        TreeWidgetFile* file_item = reinterpret_cast<TreeWidgetFile*>(item);
-        if (file_item->file_ptr->is_encrypted() and file_item->file_ptr->is_locked())
+    QList<QTreeWidgetItem*> selected = ui->archiveWidget->selectedItems();
+    for (auto& item : selected) {
+        if (item->type() == 1002)   // TreeWidgetFile
         {
-            bool not_canceled;
-            QString password = QInputDialog::getText(this, "Unlocking file", "Password:", QLineEdit::Password, QString(), &not_canceled);
+            TreeWidgetFile* file_item = reinterpret_cast<TreeWidgetFile*>(item);
+            if (file_item->file_ptr->is_encrypted() and file_item->file_ptr->is_locked())
+            {
+                bool not_canceled;
+                QString password = QInputDialog::getText(this, QString("Unlocking file ") + QString::fromStdString(file_item->file_ptr->name), "Password:", QLineEdit::Password, QString(), &not_canceled);
 
-            if (not not_canceled) return;
-            std::string pw(password.toStdString());
+                if (not not_canceled) {
+                    item->setSelected(false);
+                    continue;
+                }
 
-            bool success = file_item->try_unlocking(pw);
+                std::string pw(password.toStdString());
 
-            if (success) {
-                std::cout << "success" << std::endl;
-            }
-            else {
-                std::cout << "fail" << std::endl;
+                bool success = file_item->try_unlocking(pw);
+
+                if (not success) {
+                    item->setSelected(false);
+                }
             }
         }
     }
+
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

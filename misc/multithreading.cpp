@@ -204,6 +204,10 @@ namespace multithreading
 
         uint32_t block_count = ceill((long double)original_size / block_size);
         if (block_count == 1) block_size = original_size;
+        if (block_count == 0) {
+            block_count = 1;
+            block_size = 0;
+        }
 
         // preparing vector of empty Compression objects for threads
         std::vector<Compression*> comp_v;
