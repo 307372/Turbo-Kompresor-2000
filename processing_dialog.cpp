@@ -76,8 +76,9 @@ ProcessingDialog::~ProcessingDialog()
 
 void ProcessingDialog::closeEvent(QCloseEvent *event) {
 
-    if (my_thread != nullptr) {
-        if ( !this->my_thread->isFinished() ) {
+    if (my_thread != nullptr) {                 // if processing has even been started
+
+        if ( !this->my_thread->isFinished() ) { // make sure processing is finished
 
             if (this->ui->stackedWidget->currentWidget() == this->ui->page_compression_progress) {
                 QString title = "Are you sure you want to cancel this?";
@@ -148,6 +149,10 @@ uint16_t ProcessingDialog::get_flags() {
 
     case 1:     // CRC-32
         flags[14] = true;
+        break;
+
+    case 2:     // SHA-256
+        flags[13] = true;
         break;
     }
 
@@ -393,6 +398,21 @@ void ProcessingDialog::on_buttonDecompressionStart_clicked()
     for (auto single_folder : folders) single_folder->get_ptrs( folders, files );
     for (auto single_file   : files  ) single_file->get_ptrs( files );
 
+    for (int32_t i=0; i < files.size(); ++i) {
+        if (i >= 0) {
+            if (files[i]->is_locked()) {
+                bool success = this->ask_for_password_and_unlock(files[i]);
+                if (!success)
+                {
+                    files[i]->ptr_already_gotten = false;   // resetting the flag for future use
+                    files[i] = nullptr;
+                    files.erase(files.begin() + i);
+                    --i;
+                }
+            }
+        }
+    }
+
 
     if ( just_files ) {
         std::filesystem::create_directories( target_path ); // making sure extraction path actually exists
@@ -523,3 +543,22 @@ void ProcessingDialog::on_button_decompression_path_dialog_clicked()
     ui->lineEdit_decompression_path->setText(path_to_folder);
 }
 
+bool ProcessingDialog::ask_for_password_and_unlock(File* file_item)
+{
+    bool success = true;
+    if (file_item->is_locked())
+    {
+        bool not_canceled;
+        QString password = QInputDialog::getText(this, QString("Unlocking file ") + QString::fromStdString(file_item->name), "Password:", QLineEdit::Password, QString(), &not_canceled);
+
+        if (not not_canceled) {
+            return false;
+        }
+
+        std::string pw(password.toStdString());
+
+        bool fake_aborting_var = false;  // We probably wouldn't want this to be interrupted
+        success = file_item->unlock(pw, parent_mw->archive_ptr->archive_file, fake_aborting_var);
+    }
+    return success;
+}

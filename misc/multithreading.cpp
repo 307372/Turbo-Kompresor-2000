@@ -161,6 +161,12 @@ namespace multithreading
                 {
                     new_checksum = iv.get_SHA1_from_stream(output, original_size, aborting_var);
                 }
+                else if (checksum.length() == 64 )  // SHA-256
+                {
+                    new_checksum = iv.get_SHA256_from_stream(output, aborting_var);
+                }
+
+
                 if (new_checksum == checksum) {
                     *successful = true;
                 }
@@ -168,7 +174,7 @@ namespace multithreading
                     *successful = false;
                 }
             }
-            else *successful = true;    // if the checksum is not checked, we assume success
+            else *successful = true;    // if the checksum is not supposed to be checked, we assume success
 
         }
         if (output.is_open() and task == Compression::decompress) output.close();
@@ -363,6 +369,12 @@ namespace multithreading
                 IntegrityValidation iv;
                 checksum = iv.get_CRC32_from_file(target_path, aborting_var);
             }
+            if (bin_flags[13])  // SHA-256
+            {
+                IntegrityValidation iv;
+                checksum = iv.get_SHA256_from_file(target_path, aborting_var);
+            }
+
             checksum_done = true;
         }
         else if (task == Compression::decompress)
@@ -377,6 +389,12 @@ namespace multithreading
                 checksum = std::string(10, 0x00);
                 archive_stream.read((char*)checksum.data(), checksum.length());
             }
+            if (bin_flags[13])  // SHA-256
+            {
+                checksum = std::string(64, 0x00);
+                archive_stream.read((char*)checksum.data(), checksum.length());
+            }
+
             checksum_done = true;
         }
 

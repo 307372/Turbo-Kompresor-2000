@@ -93,6 +93,7 @@ private:
     void compression_start();
     void start_processing_timer();
     void correct_duplicate_names(File* target_file, Folder* parent_folder);
+    bool ask_for_password_and_unlock(File* file_item);
 };
 
 

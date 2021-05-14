@@ -301,8 +301,13 @@
              <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Your checksum of choice will be appended to compressed data, for the purpose of validating file integrity after decompression. Even if one bit is off, the checksum should reflect that.&lt;/p&gt;&lt;p&gt;CRC-32 is quicker and should work well.&lt;br/&gt;SHA-1 is slower, but it was developped by NSA, so it's way cooler.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
             </property>
             <property name="currentIndex">
-             <number>1</number>
+             <number>2</number>
             </property>
+            <item>
+             <property name="text">
+              <string>CRC-32</string>
+             </property>
+            </item>
             <item>
              <property name="text">
               <string>SHA-1</string>
@@ -310,7 +315,7 @@
             </item>
             <item>
              <property name="text">
-              <string>CRC-32</string>
+              <string>SHA-256</string>
              </property>
             </item>
            </widget>

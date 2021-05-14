@@ -36,6 +36,7 @@ public:
     void reload_archive();
     void write_file_to_current_archive( File* file_model, bool& aborting_var );
     void write_folder_to_current_archive( Folder* folder_model, bool& aborting_var );
+    bool ask_for_password_and_unlock(TreeWidgetFile* item);
 
     Archive* archive_ptr = nullptr;
     std::string current_archive_path = "";
