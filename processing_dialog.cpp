@@ -76,8 +76,9 @@ ProcessingDialog::~ProcessingDialog()
 
 void ProcessingDialog::closeEvent(QCloseEvent *event) {
 
-    if (my_thread != nullptr) {
-        if ( !this->my_thread->isFinished() ) {
+    if (my_thread != nullptr) {                 // if processing has even been started
+
+        if ( !this->my_thread->isFinished() ) { // make sure processing is finished
 
             if (this->ui->stackedWidget->currentWidget() == this->ui->page_compression_progress) {
                 QString title = "Are you sure you want to cancel this?";
@@ -115,13 +116,12 @@ void ProcessingDialog::closeEvent(QCloseEvent *event) {
 
 
 uint16_t ProcessingDialog::get_flags() {
-
     std::bitset<16> flags(0);
-    flags[0] = ui->checkBox_BWT->isChecked();
-    flags[1] = ui->checkBox_MTF->isChecked();
-    flags[2] = ui->checkBox_RLE->isChecked();
+    flags[0] = ui->checkBox_BWT->isChecked();   // Burrows-Wheeler transform
+    flags[1] = ui->checkBox_MTF->isChecked();   // Move-to-front
+    flags[2] = ui->checkBox_RLE->isChecked();   // Run-length encoding
 
-    flags[9] = true;        // 8 mb blocks
+
 
     switch (ui->comboBox_entropy_coding->currentIndex()) {
     case 0:     // None
@@ -136,6 +136,12 @@ uint16_t ProcessingDialog::get_flags() {
         break;
     }
 
+
+    flags[6] = (ui->groupBox_AES128->isChecked() and not ui->line_edit_AES128_password->text().isEmpty());  // AES-128
+    // Will only be done if password is provided and checkbox is checked
+
+    flags[9] = true;        // enforces 8 mb blocks
+
     switch (ui->comboBox_checksum->currentIndex()) {
     case 0:     // SHA-1
         flags[15] = true;
@@ -143,6 +149,10 @@ uint16_t ProcessingDialog::get_flags() {
 
     case 1:     // CRC-32
         flags[14] = true;
+        break;
+
+    case 2:     // SHA-256
+        flags[13] = true;
         break;
     }
 
@@ -258,11 +268,22 @@ void ProcessingDialog::on_pushButton_compress_clicked()
     ui->stackedWidget->setCurrentIndex(0);
 
     uint16_t flags = this->get_flags();
+    std::bitset<16> bin_flags(flags);
+
     std::vector<File*> list_of_files;
 
     if (parent_usertype == 1001) {  // TreeWidgetFolder
         for (auto &file_path : paths_to_files) {
             File* new_file_ptr = twfolder_ptr->archive_ptr->add_file_to_archive_model( *(twfolder_ptr->folder_ptr), file_path.toStdString(), flags );
+
+            if (bin_flags[6])   // AES-128
+            {
+                // Preparing the file for encryption
+                std::string password = ui->line_edit_AES128_password->text().toStdString();
+                bool fake_aborting_var = false; // this shouldn't be interrupted
+                new_file_ptr->prepare_for_encryption(password, fake_aborting_var);
+            }
+
             correct_duplicate_names(new_file_ptr, twfolder_ptr->folder_ptr);
             list_of_files.push_back( new_file_ptr );
         }
@@ -270,6 +291,15 @@ void ProcessingDialog::on_pushButton_compress_clicked()
     else if (parent_usertype == 1002) { // TreeWidgetFile
         for (auto &file_path : paths_to_files) {
             File* new_file_ptr = twfile_ptr->archive_ptr->add_file_to_archive_model( *(twfile_ptr->file_ptr->parent_ptr), file_path.toStdString(), flags );
+
+            if (bin_flags[6])   // AES-128
+            {
+                // Preparing the file for encryption
+                std::string password = ui->line_edit_AES128_password->text().toStdString();
+                bool fake_aborting_var = false; // this shouldn't be interrupted
+                new_file_ptr->prepare_for_encryption(password, fake_aborting_var);
+            }
+
             correct_duplicate_names(new_file_ptr, twfile_ptr->file_ptr->parent_ptr);
             list_of_files.push_back( new_file_ptr );
         }
@@ -367,6 +397,21 @@ void ProcessingDialog::on_buttonDecompressionStart_clicked()
 
     for (auto single_folder : folders) single_folder->get_ptrs( folders, files );
     for (auto single_file   : files  ) single_file->get_ptrs( files );
+
+    for (int32_t i=0; i < files.size(); ++i) {
+        if (i >= 0) {
+            if (files[i]->is_locked()) {
+                bool success = this->ask_for_password_and_unlock(files[i]);
+                if (!success)
+                {
+                    files[i]->ptr_already_gotten = false;   // resetting the flag for future use
+                    files[i] = nullptr;
+                    files.erase(files.begin() + i);
+                    --i;
+                }
+            }
+        }
+    }
 
 
     if ( just_files ) {
@@ -482,6 +527,9 @@ void ProcessingDialog::onTimerTimeout() {
 
 
     ui->label_duration_value->setText( formatted_time );
+    if (progressBarStepMax == 0)
+        progressBarStepMax = 1;
+
     ui->progressBarFile->setValue( round(progress_step_value*100/progressBarStepMax) );
 }
 
@@ -495,3 +543,22 @@ void ProcessingDialog::on_button_decompression_path_dialog_clicked()
     ui->lineEdit_decompression_path->setText(path_to_folder);
 }
 
+bool ProcessingDialog::ask_for_password_and_unlock(File* file_item)
+{
+    bool success = true;
+    if (file_item->is_locked())
+    {
+        bool not_canceled;
+        QString password = QInputDialog::getText(this, QString("Unlocking file ") + QString::fromStdString(file_item->name), "Password:", QLineEdit::Password, QString(), &not_canceled);
+
+        if (not not_canceled) {
+            return false;
+        }
+
+        std::string pw(password.toStdString());
+
+        bool fake_aborting_var = false;  // We probably wouldn't want this to be interrupted
+        success = file_item->unlock(pw, parent_mw->archive_ptr->archive_file, fake_aborting_var);
+    }
+    return success;
+}

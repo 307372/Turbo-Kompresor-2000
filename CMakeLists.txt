@@ -46,13 +46,11 @@ add_executable(Turbo-Kompresor-2000
 
   misc/custom_tree_widget_items.h misc/custom_tree_widget_items.cpp
 
-  misc/multithreading.h
+  misc/multithreading.h misc/multithreading.cpp
 
   misc/model.h
 
   misc/dc3.h
-
-  misc/aes_functions.h
 
   resources/icons/icons.qrc
 

@@ -15,7 +15,8 @@ ArchiveWindow::ArchiveWindow(QWidget *parent)
     , config_ptr(new Config())
 {
     ui->setupUi(this);
-    this->setWindowIcon( *(new QIcon(":/archive.png")));
+    this->ArchiveIcon = QIcon(":/archive.png");
+    this->setWindowIcon(ArchiveIcon);
 
     ui->archiveWidget->setColumnWidth(0, 300);
     ui->archiveWidget->setSelectionMode( QAbstractItemView::SelectionMode::ExtendedSelection );
@@ -127,7 +128,7 @@ void ArchiveWindow::extract_selected_clicked()
         md.prepare_GUI_decompression();
         md.exec();
 
-        this->reload_archive();
+        // this->reload_archive();
     }
 }
 
@@ -137,15 +138,27 @@ void ArchiveWindow::extract_all_clicked()
     // if there's no open archive, extract nothing
     if (ui->archiveWidget->invisibleRootItem()->childCount() == 0) return;
 
+    // ui->archiveWidget->selectAll();
+
+    /*QTreeWidgetItemIterator it(ui->archiveWidget);
+    while (*it) {
+        (*it)->setSelected(true);
+        ++it;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds {50});
+
+    extract_selected_clicked();//*/
+
+    //*
     std::vector<QTreeWidgetItem*> extraction_targets;
     extraction_targets.push_back(ui->archiveWidget->topLevelItem(0));
 
     // Open processing dialog
     ProcessingDialog md( extraction_targets,  this);
     md.prepare_GUI_decompression();
-    md.exec();
+    md.exec();//*/
 
-    this->reload_archive();
+    // this->reload_archive();
 }
 
 
@@ -290,7 +303,7 @@ void ArchiveWindow::add_new_folder_clicked()
 
         bool not_canceled = false;
 
-        QString folder_name =  QInputDialog::getText(this, "Name your folder", "Type folder's name here:", QLineEdit::Normal, QString(), &not_canceled);
+        QString folder_name = QInputDialog::getText(this, "Name your folder", "Type folder's name here:", QLineEdit::Normal, QString(), &not_canceled);
 
         if (not_canceled) {
             if (itm->type() == 1001) {  //TreeWidgetFolder
@@ -336,4 +349,39 @@ void ArchiveWindow::open_settings_dialog()
     if (current_archive_path != "") reload_archive();
 }
 
+bool ArchiveWindow::ask_for_password_and_unlock(TreeWidgetFile* item)
+{
+    bool success = true;
+    if (item->file_ptr->is_locked())
+    {
+        bool not_canceled;
+        QString password = QInputDialog::getText(this, QString("Unlocking file ") + QString::fromStdString(item->file_ptr->name), "Password:", QLineEdit::Password, QString(), &not_canceled);
 
+        if (not not_canceled) {
+            return false;
+        }
+
+        std::string pw(password.toStdString());
+
+        success = item->try_unlocking(pw);
+    }
+    return success;
+}
+
+void ArchiveWindow::on_archiveWidget_itemSelectionChanged()
+{
+    QList<QTreeWidgetItem*> selected = ui->archiveWidget->selectedItems();
+    for (auto& item : selected) {
+        if (item->type() == 1002)   // TreeWidgetFile
+        {
+            TreeWidgetFile* file_item = reinterpret_cast<TreeWidgetFile*>(item);
+            if (file_item->file_ptr->is_locked()) {
+
+                bool success = ask_for_password_and_unlock(file_item);
+
+                if (not success) item->setSelected(false);
+                else item->setSelected(true);
+            }
+        }
+    }
+}

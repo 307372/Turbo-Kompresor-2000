@@ -15,7 +15,7 @@ Archive::Archive() : root_folder(std::make_unique<Folder>()) {}
 Archive::~Archive()
 {
     close();
-    root_folder.release(); // NOLINT(bugprone-unused-return-value)
+    // root_folder.release(); // NOLINT(bugprone-unused-return-value)
 }
 
 

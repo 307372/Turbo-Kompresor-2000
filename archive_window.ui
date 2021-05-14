@@ -63,7 +63,7 @@
       <item>
        <widget class="QPushButton" name="buttonExtractSelected">
         <property name="text">
-         <string>Extract</string>
+         <string>Extract selected</string>
         </property>
        </widget>
       </item>

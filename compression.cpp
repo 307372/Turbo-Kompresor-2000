@@ -7,10 +7,13 @@
 #include <cassert>
 #include <vector>
 #include <wmmintrin.h>
+#include <iostream>
 
 #include <divsufsort.h> // external library
+#include <iomanip>
 
-#include "misc/aes_functions.h"
+// #include "misc/aes_functions.h"
+#include "cryptography.h"
 #include "misc/bitbuffer.h"
 #include "misc/model.h"
 #include "misc/dc3.h"
@@ -40,7 +43,7 @@ void Compression::load_text( std::fstream &input, uint64_t text_size )
 void Compression::load_part(std::fstream &input, uint64_t text_size, uint32_t part_num, uint32_t block_size) {
     if (!*aborting_var) {
         delete[] this->text;
-        assert( block_size * part_num < text_size ); // part_size * part_num == starting position
+        assert( block_size * part_num <= text_size ); // part_size * part_num == starting position
 
         if (block_size * (part_num+1) < text_size ) this->size = block_size;
         else this->size = text_size - (block_size * part_num);
@@ -110,7 +113,7 @@ void Compression::BWT_make()
 
 
 void Compression::BWT_reverse()
-{   // Using L-F mapping
+{   // Using L-PBKDF2_HMAC_SHA256_get_block mapping
     if (!*aborting_var) {
         uint32_t encoded_length = this->size-4; // subtracting 4 bits due to 4 last bits being starting position
 
@@ -265,7 +268,7 @@ void Compression::BWT_make2()
 
 
 void Compression::BWT_reverse2()
-{   // Using L-F mapping
+{   // Using L-PBKDF2_HMAC_SHA256_get_block mapping
 
     if (!*aborting_var) {
         uint32_t encoded_length = this->size-4; // subtracting 4 bits due to 4 last bits being starting position
@@ -1225,141 +1228,249 @@ void Compression::AC2_reverse()
     }
 }
 
-
-void Compression::AES128_make(uint8_t key[], uint8_t iv_char[])
+void print_arr_8(uint8_t arr[], uint64_t size, const std::string& message="", const std::string& sep=" ")
 {
-    int64_t amount_of_blocks = ceill((long double)size / 16.0);    // calculating the amount of blocks of ciphertext
-    __m128i iv = *((__m128i*) iv_char);
-    __m128i round_keys[11] = {};
-    AES128_get_subkeys(key, round_keys);
-
-    uint64_t output_size = sizeof(iv) + size;  // we'll need to save initialization vector with encrypted data
-    auto* output = new uint8_t [output_size]();
-    _mm_storeu_si128((__m128i*)(output), iv);       // saving initialization vector to the beginning of the output
-
-
-    __m128i ctr = iv;   // counter
-    __m128i ctr_enc;    // encrypted counter
-    __m128i block;      // block of plaintext
-
-    for(uint64_t i=0; i < amount_of_blocks-1; ++i)
+    std::cout << message << '\n' << '[';
+    for (uint64_t i=0; i < size; ++i)
     {
-        block = _mm_loadu_si128((__m128i*) (text+i*16));    // loading a block of plaintext
-
-        // in ctr (counter) mode, we'll encrypt counter and then xor it with plaintext to get ciphertext
-        ctr_enc = _mm_xor_si128(round_keys[0], ctr);    // xoring ctr with key
-
-        // 10 rounds of SubBytes, ShiftRows, MixColumns, AddRoundKey
-        for (uint32_t j=1; j <= 9; ++j) ctr_enc = _mm_aesenc_si128(ctr_enc, round_keys[j]);
-        ctr_enc = _mm_aesenclast_si128(ctr_enc, round_keys[10]);
-
-        block = _mm_xor_si128(block, ctr_enc);  // xoring block of data with encrypted counter
-
-        _mm_storeu_si128((__m128i*)(output+(i+1)*16), block);   // saving encrypted data offset by 1 block (1st one is the iv)
-
-        increment_128b(ctr, iv_char);
+        std::cout << std::hex << std::setw(2) << std::setfill('0') << (uint16_t) (uint8_t) arr[i] << sep;
     }
-
-    // processing last block
-    block = _mm_loadu_si128((__m128i*)(text+(amount_of_blocks-1)*16));
-    ctr_enc = _mm_xor_si128(round_keys[0], ctr);    // xoring ctr with key
-
-    // 10x SubBytes, ShiftRows, MixColumns, AddRoundKey
-    for (uint32_t j=1; j <= 9; ++j) ctr_enc = _mm_aesenc_si128(ctr_enc, round_keys[j]);
-    ctr_enc = _mm_aesenclast_si128(ctr_enc, round_keys[10]);
-
-    // xoring block of data with our encrypted counter will give us our ciphertext
-    block = _mm_xor_si128(block, ctr_enc);
-
-    // calculating how much data should be written
-    uint32_t reminder = size % 16;
-    if (reminder == 0) reminder = 16;
-
-    for (uint32_t i=0; i < reminder; ++i)
-    {
-        if (i < 8)
-        {
-            uint8_t val = ((block[0] >>(8*i)) & 0xFF);
-            output[size-reminder+i+16] = val;
-        }
-        else
-        {
-            uint8_t val = ((block[1] >>(8*(i-8))) & 0xFF);
-            output[size-reminder+i+16] = val;
-        }
-    }
-
-    _mm_empty();    // cleaning up MMX register
-
-    std::swap(text, output);
-    delete[] output;
+    std::cout << ']' << std::dec << std::endl;
 }
 
 
-void Compression::AES128_reverse( uint8_t key[] )
-{
-    int64_t amount_of_blocks = ceill((long double)size / 16.0);
+void Compression::AES128_make(uint8_t key[], uint32_t key_size, uint8_t iv[], uint32_t iv_size, uint8_t metadata[], uint8_t metadata_size) {
 
-    __m128i round_keys[11] = {};
-    AES128_get_subkeys(key, round_keys);
-    __m128i iv = _mm_loadu_si128((__m128i*) text);
+    uint64_t original_size = this->size;
+    crypto::AES128::encrypt(this->text, original_size, key, key_size, iv, iv_size);
+    this->size = original_size;
+    if (this->part_id == 0) {   // if this is the 1st block, we'll need to add the metadata necessary for decryption
+        assert(metadata != nullptr);
+        assert(metadata_size != 0);
 
-    uint64_t output_size = size - sizeof(iv);  // we'll won't need IV in our plaintext
-    auto* output = new uint8_t [output_size]();
-    _mm_storeu_si128((__m128i*)(output), iv);
+        uint32_t prepended_size = metadata_size + this->size;
+        auto* prepended_with_metadata = new uint8_t [prepended_size];
 
-    __m128i ctr = iv;
-    __m128i ctr_enc;
-    __m128i block;
-    for(uint64_t i=1; i < amount_of_blocks-1; ++i)  // -1 block, because if it's not 128b, then we'll go out of range
-    {
-        block = _mm_loadu_si128((__m128i*)(text+i*16)); // loading a block of ciphertext
-        // in ctr (counter) mode, we'll encrypt counter and then xor it with plaintext to get ciphertext
-        ctr_enc = _mm_xor_si128(round_keys[0], ctr);    // xoring ctr with key
+        // prepending ciphertext with metadata
+        for (uint32_t i=0; i < metadata_size; ++i) {
+            prepended_with_metadata[i] = metadata[i];
+        }
 
-        // 10x SubBytes, ShiftRows, MixColumns, AddRoundKey
-        for (uint32_t j=1; j <= 9; ++j) ctr_enc = _mm_aesenc_si128(ctr_enc, round_keys[j]);
-        ctr_enc = _mm_aesenclast_si128(ctr_enc, round_keys[10]);
+        for (uint64_t i = 0; i < this->size; ++i ) {
+            prepended_with_metadata[metadata_size + i] = this->text[i];
+        }
 
-        // xoring block of data with our encrypted counter will give us our ciphertext
-        block = _mm_xor_si128(block, ctr_enc);
-        _mm_storeu_si128((__m128i*)(output+(i-1)*16), block);    // saving plaintext, we're skipping 1st block of
-        // ciphertext, as it contained IV
-        increment_128b(ctr, text);   // first 16 bytes of text are IV
+        std::swap(this->text, prepended_with_metadata);
+        std::swap(this->size, prepended_size);
+        delete[] prepended_with_metadata;
     }
 
-    // processing last block
-    block = _mm_loadu_si128((__m128i*)(text+(amount_of_blocks-1)*16));
-    ctr_enc = _mm_xor_si128(round_keys[0], ctr);    // xoring ctr with key
+    /*std::mt19937 gen(std::random_device{}());
 
-    // 10x SubBytes, ShiftRows, MixColumns, AddRoundKey
-    for (uint32_t j=1; j <= 9; ++j) ctr_enc = _mm_aesenc_si128(ctr_enc, round_keys[j]);
-    ctr_enc = _mm_aesenclast_si128(ctr_enc, round_keys[10]);
+    uint32_t salt_size = crypto::PBKDF2::saltSize;
+    auto* salt = new uint8_t [salt_size]();
 
-    // xoring block of data with our encrypted counter will give us our ciphertext
-    block = _mm_xor_si128(block, ctr_enc);
+    crypto::fill_with_random_data(salt, salt_size, gen);
+    print_arr_8(salt, salt_size, "PBKDF2 salt:");
 
-    // calculating how much data should be written
-    uint32_t reminder = size % 16;
-    if (reminder == 0) reminder = 16;
+    uint32_t aes128_key_size = 16;
+    uint32_t iterations_size = 8;
+    auto iterations = static_cast<uint64_t>(crypto::PBKDF2::iteration_count::debug);
+    std::cout << "Iterations: " << iterations << std::endl;
+    // uint32_t iterations = 1000;
 
-    for (uint32_t i=0; i < reminder; ++i)
-    {
-        if (i < 8)
-        {
-            uint8_t val = ((block[0] >>(8*i)) & 0xFF);
-            output[size-reminder+i-16] = val;
-        }
-        else
-        {
-            uint8_t val = ((block[1] >>(8*(i-8))) & 0xFF);
-            output[size-reminder+i-16] = val;
-        }
+    std::cout << "Deriving key...\t" << std::flush;
+    std::string pkey = crypto::PBKDF2::HMAC_SHA256(pw, salt, salt_size, iterations, aes128_key_size, *this->aborting_var);
+    std::cout << "Done" << std::endl;
+
+    print_arr_8((uint8_t *) pkey.c_str(), pkey.length(), "PBKDF2 result:");
+
+    auto* rkey = new uint8_t [aes128_key_size]();
+    crypto::fill_with_random_data(rkey, aes128_key_size, gen);
+    print_arr_8(rkey, aes128_key_size, "Random key:");
+
+
+
+
+    const uint32_t iv_size = 16;
+    uint8_t iv_text[iv_size] = {};
+    crypto::fill_with_random_data(iv_text, iv_size, gen);
+    print_arr_8(iv_text, iv_size, "iv for text:");
+
+    std::cout << "AES128'ing text...\t" << std::flush;
+    comp.AES128_make(rkey, iv_text);
+    std::cout << "Done" << std::endl;
+
+    Compression comp2(fake);
+    delete[] comp2.text;
+    comp2.size = aes128_key_size;
+    comp2.text = new uint8_t [comp2.size]();
+
+    uint8_t iv_pw[iv_size] = {};
+    crypto::fill_with_random_data(iv_pw, iv_size, gen);
+    print_arr_8(iv_pw, iv_size, "iv for password:");
+
+
+    for (uint32_t i=0; i < comp2.size; ++i)
+        comp2.text[i] = rkey[i];
+
+    comp2.AES128_make((uint8_t*) pkey.c_str(), iv_pw);
+    print_arr_8(comp2.text + 16, 16, "Encrypted random key:");
+
+    std::cout << "HMAC'ing encrypted random key...\t" << std::flush;
+    std::string encrypted_rkey_hmac = crypto::HMAC::SHA256(comp2.text, comp2.size, (uint8_t*) rkey, aes128_key_size, fake);
+    std::cout << "Done" << std::endl;
+    print_arr_8((uint8_t *) encrypted_rkey_hmac.c_str(), encrypted_rkey_hmac.length(), "HMAC:");
+
+    //*
+    uint64_t extended_size = salt_size + iterations_size + comp2.size + encrypted_rkey_hmac.length() + comp.size;
+    uint64_t saving_offset = 0;
+    auto* text2 = new uint8_t [extended_size]();
+
+
+    // Saving
+
+    for (uint64_t i=0; i < salt_size; ++i) {                        // saving salt
+        text2[i] = salt[i];
     }
+    saving_offset += salt_size;
 
-    _mm_empty();    // cleaning up MMX register
+    for (uint64_t i=0; i < iterations_size; ++i) {                  // saving the number of iterations
+        text2[saving_offset + i] = (uint8_t) (iterations >> (i * 8u)) & 0xFFu;
+    }
+    saving_offset += iterations_size;
 
-    std::swap(text, output);
-    delete[] output;
+    for (uint64_t i=0; i < comp2.size; ++i) {                       // saving encrypted random key
+        text2[saving_offset + i] = (uint8_t) comp2.text[i];
+    }
+    saving_offset += comp2.size;
+
+    for (uint64_t i=0; i < encrypted_rkey_hmac.length(); ++i) {     // saving HMAC-SHA256(encrypted_rkey, pkey)
+        text2[saving_offset + i] = (uint8_t) encrypted_rkey_hmac[i];
+    }
+    saving_offset += encrypted_rkey_hmac.length();
+
+
+    for (uint64_t i=0; i < comp.size; ++i) {                        // saving text, which is encrypted using rkey
+        text2[saving_offset + i] = comp.text[i];
+    }
+    saving_offset += comp.size;
+
+    assert(saving_offset == extended_size);
+
+    std::swap(comp.text, text2);
+    delete[] text2;
+
+    comp.size = extended_size;
+
+    std::fstream fout("/home/pc/Desktop/encrypted.aes", std::ios::binary | std::ios::out);
+    assert(fout.is_open());
+
+    delete[] rkey;
+    delete[] salt;
+    */
 }
+
+void Compression::AES128_reverse(uint8_t key[], uint32_t key_size) {
+    uint64_t temp_size = this->size;    // without this, casting the value to uint64_t will cause a bug
+    crypto::AES128::decrypt(this->text, temp_size, key, key_size);
+    this->size = temp_size;
+}
+
+void Compression::AES128_extract_metadata(uint8_t *&metadata, uint32_t &metadata_size) {
+    assert(part_id == 0);
+
+    metadata_size = proper_metadata_size;
+    metadata = new uint8_t [metadata_size];
+
+    for (uint32_t i=0; i < metadata_size; ++i) {
+        metadata[i] = this->text[i];
+    }
+
+    for (uint32_t i = metadata_size; i < this->size; ++i) {
+        this->text[i-metadata_size] = this->text[i];
+    }
+    this->size -= metadata_size;
+}
+
+bool Compression::AES128_verify_password_str(std::string& pw, uint8_t *metadata, uint32_t metadata_size) {
+    assert(metadata_size == proper_metadata_size);
+    const uint32_t aes128_key_size = 16;
+
+    // we'll need to parse metadata to verify the password
+    uint32_t salt_size = crypto::PBKDF2::saltSize;
+    uint8_t salt[salt_size];
+
+    uint64_t loading_offset = 0;
+    for (uint64_t i=0; i < salt_size; ++i) {                            // loading salt
+        salt[i] = metadata[i];
+    }
+    loading_offset += salt_size;
+    print_arr_8(salt, salt_size, "Salt:");
+
+    const uint32_t iterations_size = 8;
+    uint64_t iterations = 0;        // needs to be 8 bytes long!
+
+
+    for (uint64_t i=0; i < iterations_size; ++i) {                      // loading the number of iterations
+        iterations += ((uint64_t)metadata[loading_offset + i] << (i * 8u));
+    }
+    loading_offset += iterations_size;
+    std::cout << "Iterations: " << iterations << std::endl;
+
+    std::cout << "Deriving key...\t" << std::flush;
+    std::string pkey = crypto::PBKDF2::HMAC_SHA256(pw, salt, salt_size, iterations, aes128_key_size, *this->aborting_var);
+    std::cout << "Done" << std::endl;
+
+    print_arr_8((uint8_t *) pkey.c_str(), pkey.length(), "Derived key:");
+
+    uint64_t encrypted_key_size = 16+16;    // 0-15 - IV, 16-31 - ciphertext
+    auto* encrypted_key = new uint8_t [encrypted_key_size];
+    for (uint32_t i=0; i < encrypted_key_size; ++i) {
+        encrypted_key[i] = metadata[loading_offset++];
+    }
+
+
+
+    print_arr_8(encrypted_key, 16, "IV for random key:");
+    print_arr_8(encrypted_key + 16, 16, "Encrypted random key:");
+
+    crypto::AES128::decrypt(encrypted_key, encrypted_key_size, (uint8_t*) pkey.c_str(), pkey.length());
+
+    print_arr_8(encrypted_key, encrypted_key_size, "Decrypted random key:");
+
+    uint32_t hmac_size = 32;
+    std::string generated_hmac = crypto::HMAC::SHA256(metadata + salt_size + iterations_size, hmac_size,
+                                                      encrypted_key, encrypted_key_size, *this->aborting_var);
+
+
+    auto* hmac = new uint8_t [hmac_size];
+
+
+    for (uint64_t i=0; i < hmac_size; ++i) {                            // loading HMAC-SHA256
+        hmac[i] = metadata[loading_offset++];
+    }
+
+    print_arr_8(hmac, hmac_size, "loaded HMAC:");
+    print_arr_8((uint8_t *) generated_hmac.c_str(), generated_hmac.size(), "our HMAC:");
+
+    bool correct_password = true;
+
+    for (uint32_t i=0; i < hmac_size; ++i){
+        if (hmac[i] != (uint8_t) generated_hmac[i]) {
+            correct_password = false;
+            break;
+        }
+    }
+
+    delete[] hmac;
+    delete[] encrypted_key;
+    return correct_password;
+}
+
+
+
+
+
+
 

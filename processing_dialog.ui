@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>317</width>
-    <height>313</height>
+    <height>361</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,7 +17,7 @@
    <item>
     <widget class="QStackedWidget" name="stackedWidget">
      <property name="currentIndex">
-      <number>2</number>
+      <number>1</number>
      </property>
      <widget class="QWidget" name="page_compression_progress">
       <layout class="QVBoxLayout" name="verticalLayout">
@@ -216,6 +216,79 @@
            </widget>
           </item>
           <item>
+           <widget class="QGroupBox" name="groupBox_AES128">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>22</height>
+             </size>
+            </property>
+            <property name="title">
+             <string>AES128 encryption</string>
+            </property>
+            <property name="flat">
+             <bool>true</bool>
+            </property>
+            <property name="checkable">
+             <bool>true</bool>
+            </property>
+            <layout class="QVBoxLayout" name="_verticalLayout_8">
+             <property name="spacing">
+              <number>6</number>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QLineEdit" name="line_edit_AES128_password">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>15</height>
+                </size>
+               </property>
+               <property name="toolTip">
+                <string/>
+               </property>
+               <property name="toolTipDuration">
+                <number>3</number>
+               </property>
+               <property name="echoMode">
+                <enum>QLineEdit::Password</enum>
+               </property>
+               <property name="placeholderText">
+                <string>Password</string>
+               </property>
+               <property name="clearButtonEnabled">
+                <bool>false</bool>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
            <widget class="QLabel" name="_label_checksum">
             <property name="text">
              <string>Checksum:</string>
@@ -228,8 +301,13 @@
              <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Your checksum of choice will be appended to compressed data, for the purpose of validating file integrity after decompression. Even if one bit is off, the checksum should reflect that.&lt;/p&gt;&lt;p&gt;CRC-32 is quicker and should work well.&lt;br/&gt;SHA-1 is slower, but it was developped by NSA, so it's way cooler.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
             </property>
             <property name="currentIndex">
-             <number>1</number>
+             <number>2</number>
             </property>
+            <item>
+             <property name="text">
+              <string>CRC-32</string>
+             </property>
+            </item>
             <item>
              <property name="text">
               <string>SHA-1</string>
@@ -237,7 +315,7 @@
             </item>
             <item>
              <property name="text">
-              <string>CRC-32</string>
+              <string>SHA-256</string>
              </property>
             </item>
            </widget>
@@ -288,7 +366,7 @@
              <string/>
             </property>
             <property name="pixmap">
-             <pixmap resource="resources.qrc">:/img/archive.png</pixmap>
+             <pixmap>:/img/archive.png</pixmap>
             </property>
             <property name="scaledContents">
              <bool>true</bool>
@@ -462,8 +540,23 @@
    </item>
   </layout>
  </widget>
- <resources>
-  <include location="resources.qrc"/>
- </resources>
- <connections/>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>groupBox_AES128</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>line_edit_AES128_password</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>158</x>
+     <y>217</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>158</x>
+     <y>227</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
 </ui>

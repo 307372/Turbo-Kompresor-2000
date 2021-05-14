@@ -24,16 +24,19 @@ class ArchiveWindow : public QMainWindow
 
 private:
     Ui::ArchiveWindow *ui;
+    QIcon ArchiveIcon;
 
 public:
     ArchiveWindow(QWidget *parent = nullptr);
     ~ArchiveWindow();
+
     void new_archive_model();
     void create_empty_archive();
     void load_archive( std::string path_to_archive );
     void reload_archive();
     void write_file_to_current_archive( File* file_model, bool& aborting_var );
     void write_folder_to_current_archive( Folder* folder_model, bool& aborting_var );
+    bool ask_for_password_and_unlock(TreeWidgetFile* item);
 
     Archive* archive_ptr = nullptr;
     std::string current_archive_path = "";
@@ -60,6 +63,8 @@ private slots:
     void open_settings_dialog();
 
     void remove_selected_clicked();
+
+    void on_archiveWidget_itemSelectionChanged();
 };
 
 #endif // MAINWINDOW_H
