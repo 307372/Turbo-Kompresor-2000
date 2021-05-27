@@ -484,9 +484,7 @@ void File::copy_to_another_archive( std::fstream& src, std::fstream& dst, uint64
         dst.write((char*)buffer, buffer_size);
         delete[] buffer;
 
-
-        uint64_t backup_end_of_metadata = dst.tellp(); // position in file right after the end of metadata
-        assert( backup_end_of_metadata == dst_location - this->location + this->data_location );
+        assert( dst.tellp(); == dst_location - this->location + this->data_location );
 
         assert(this->data_location != 0);
         src.seekg(this->data_location);
@@ -546,7 +544,7 @@ void File::prepare_for_encryption(std::string& pw, bool& aborting_var)
     crypto::fill_with_random_data(salt, salt_size, gen);
 
     uint32_t key_size = crypto::AES128::key_size;
-    auto iteration_count = static_cast<uint64_t>(crypto::PBKDF2::iteration_count::debug);
+    auto iteration_count = static_cast<uint64_t>(crypto::PBKDF2::iteration_count::high);
 
     std::string pw_key = crypto::PBKDF2::HMAC_SHA256(pw, salt, salt_size,
                                                      iteration_count, key_size, aborting_var);

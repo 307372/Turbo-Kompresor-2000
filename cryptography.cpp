@@ -6,21 +6,9 @@
 #include <cmath>
 #include <cassert>
 #include <immintrin.h>
-#include <iostream>
-#include <iomanip>
 
 #include "integrity_validation.h"
 
-//*
-void print_arr_8_crypto(uint8_t arr[], uint64_t size, const std::string& message="", const std::string& sep=" ")
-{
-    std::cout << message << '\n' << '[';
-    for (uint64_t i=0; i < size; ++i)
-    {
-        std::cout << std::hex << std::setw(2) << std::setfill('0') << (uint16_t) (uint8_t) arr[i] << sep;
-    }
-    std::cout << ']' << std::dec << std::endl;
-}//*/
 
 namespace crypto {
 

@@ -8,6 +8,8 @@
 
 namespace crypto {
 
+    void fill_with_random_data(uint8_t arr[], int64_t arr_size, std::mt19937& gen, int64_t start=0, int64_t stop=-1);
+
     namespace HMAC {
 
         // HMAC-SHA256
@@ -19,18 +21,13 @@ namespace crypto {
         static const uint32_t saltSize = 16;
         enum class iteration_count { debug=1000, low=160000, medium=320000, high=720000 };
 
-        namespace {
-            std::string HMAC_SHA256_get_block(std::string &pw, uint8_t *salt, uint32_t salt_size,
-                                              uint32_t iteration_count, int32_t current_block, bool &aborting_var);
-        }
         std::string HMAC_SHA256(std::string &pw, uint8_t salt[], uint32_t salt_size,
                                 uint32_t iteration_count, uint32_t dkLen, bool &aborting_var);
-
     }
 
-    void fill_with_random_data(uint8_t arr[], int64_t arr_size, std::mt19937& gen, int64_t start=0, int64_t stop=-1);
 
-    namespace AES128 // works in CTR mode
+
+    namespace AES128 // CTR mode
     {
         const uint32_t key_size = 16;
 

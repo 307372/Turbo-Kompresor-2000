@@ -12,9 +12,9 @@
 #include <sstream>
 #include <random>
 
-#include "integrity_validation.h"
-#include "compression.h"
-#include "cryptography.h"
+#include "../integrity_validation.h"
+#include "../compression.h"
+#include "../cryptography.h"
 
 namespace multithreading
 {
@@ -51,6 +51,11 @@ namespace multithreading
                 if (progress_ptr != nullptr) (*progress_ptr)++;
             }
 
+            if (bin_flags[5] and !aborting_var) {
+                comp->rANS_make();
+                if (progress_ptr != nullptr) (*progress_ptr)++;
+            }
+
             if (bin_flags[6] and !aborting_var) {   // AES-128
                 assert(key != nullptr);
 
@@ -76,6 +81,11 @@ namespace multithreading
         {
             if (bin_flags[6] and !aborting_var) {   // AES-128
                 comp->AES128_reverse(key, crypto::AES128::key_size);
+                if (progress_ptr != nullptr) (*progress_ptr)++;
+            }
+
+            if ( bin_flags[5] and !aborting_var) {
+                comp->rANS_reverse();
                 if (progress_ptr != nullptr) (*progress_ptr)++;
             }
 
