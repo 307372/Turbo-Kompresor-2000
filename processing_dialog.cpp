@@ -134,13 +134,16 @@ uint16_t ProcessingDialog::get_flags() {
     case 2:     // Arithmetic coding (better model)
         flags[4] = true;
         break;
+
+    case 3:
+        flags[5] = true;
     }
 
 
     flags[6] = (ui->groupBox_AES128->isChecked() and not ui->line_edit_AES128_password->text().isEmpty());  // AES-128
     // Will only be done if password is provided and checkbox is checked
 
-    flags[9] = true;        // enforces 8 mb blocks
+    flags[9] = true;        // enforces 8 MiB blocks
 
     switch (ui->comboBox_checksum->currentIndex()) {
     case 0:     // SHA-1

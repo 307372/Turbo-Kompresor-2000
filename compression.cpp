@@ -7,12 +7,10 @@
 #include <cassert>
 #include <vector>
 #include <wmmintrin.h>
-#include <iostream>
+#include <bitset>
 
 #include <divsufsort.h> // external library
-#include <iomanip>
 
-// #include "misc/aes_functions.h"
 #include "cryptography.h"
 #include "misc/bitbuffer.h"
 #include "misc/model.h"
@@ -671,7 +669,7 @@ void Compression::AC_make()
         uint64_t quarter = roundl(wholed / 4.0);
 
 
-        std::vector<uint64_t> r = model::memoryless(this->text, this->size);
+        std::vector<uint64_t> r = model::AC::memoryless(this->text, this->size);
 
         if (*aborting_var) return;
 
@@ -945,7 +943,7 @@ void Compression::AC2_make() {
         uint64_t quarter = roundl(wholed / 4.0);
 
 
-        std::vector<std::vector<uint32_t>> rr = model::order_1(this->text, this->size);
+        std::vector<std::vector<uint32_t>> rr = model::AC::order_1(this->text, this->size);
 
         if (*aborting_var) return;
 
@@ -1228,14 +1226,204 @@ void Compression::AC2_reverse()
     }
 }
 
-void print_arr_8(uint8_t arr[], uint64_t size, const std::string& message="", const std::string& sep=" ")
+void Compression::rANS_make()
 {
-    std::cout << message << '\n' << '[';
-    for (uint64_t i=0; i < size; ++i)
-    {
-        std::cout << std::hex << std::setw(2) << std::setfill('0') << (uint16_t) (uint8_t) arr[i] << sep;
+    // Loosely based on a paper by James Townsend at https://arxiv.org/pdf/2001.09186.pdf
+
+    std::vector<uint64_t> PMF;                        // PMF - Probability Mass Function
+    uint8_t index_of_chars[256] = {0x00};             // given real char, gives us its index in PMF and CMF
+
+    {   // brackets here are purely to avoid pollution
+        PMF = model::ANS::memoryless(text, size);   // Calculate the model for PMF
+        std::vector<uint64_t> trimmed_PMF;  // We'll kick out all the probabilities = 0 for
+        // faster binary search during decoding
+
+        uint8_t current_identifier = 0;
+        for (uint16_t i = 0; i < 256; ++i) {
+            if (PMF[i] != 0) {
+                trimmed_PMF.push_back(PMF[i]);
+                index_of_chars[i] = current_identifier;
+                current_identifier++;
+            }
+        }
+
+        std::swap(trimmed_PMF, PMF);
     }
-    std::cout << ']' << std::dec << std::endl;
+
+    std::vector<uint64_t> CMF(PMF.size() + 1, 0);   // CMF - Cumulative Mass Function
+    for (uint32_t i=0; i < PMF.size(); ++i) {
+        CMF[i + 1] = CMF[i] + PMF[i];                   // calculating cumulative probabilities
+    }
+
+    uint64_t state = 1l << 32;                          // state
+
+    auto* stack = new uint32_t [size + 10]();           // stack of encoded states
+    uint32_t stack_i = 0;                               // stack size / iterator
+
+    uint32_t counter[256] = {};
+    for (int64_t i=size-1; i >=0; --i) {
+        ++counter[text[i]];                             // counting chars for the decoder
+
+        uint8_t x = index_of_chars[text[i]];            // index of char in our trimmed probability vectors
+        uint64_t p_i = PMF[x];
+        uint64_t prob = (p_i << 32) - 1;                // -1 in case p_i == 1<<32
+                                                        // (happens for all sources using only 1 symbol)
+
+        // rescaling & saving
+        while (state >= prob) {
+            stack[stack_i++] = state & 0xFFFFFFFF;      // saving state
+            state >>= 32;
+        }
+
+        state = ((state / p_i) << 32) + state % p_i + CMF[x];   // next state
+    }
+    // last state also needs to be pushed to stack
+    stack[stack_i++] = state & 0xFFFFFFFF;
+    stack[stack_i++] = (state >> 32) & 0xFFFFFFFF;
+
+    // creating output from original_size + model + stack
+
+    // model layout: [what symbols were used][how many of each was used]
+    // that means it'state going to be recalculated during decoding
+
+    uint32_t used_chars_size = 32;
+    uint32_t model_size = PMF.size() * 3; // *3, because we'll be saving the model on 3 bytes per element
+    // PMF.size() works, because PMF contains probabilities of only the chars, which occurred in the text
+
+    uint32_t stack_size = stack_i * sizeof(stack[0]);   // size of stack
+    uint32_t output_size = sizeof(size) + used_chars_size + model_size + stack_size;
+
+    auto* output = new uint8_t [output_size]();
+    uint32_t output_i = 0;
+
+    // saving size (4 bytes)
+    *reinterpret_cast<uint32_t*>(output) = size;
+    output_i += 4;
+
+    // preparing information about what chars were used and saving it
+    std::bitset<64> used_chars(0);
+    for (uint32_t i=0; i < 4; ++i) {
+        for (uint32_t j=0; j < 64; ++j) {
+            if (counter[i*64 + j] != 0) {
+                used_chars[j] = true;
+            }
+        }
+        *reinterpret_cast<uint64_t*>(output + output_i + i*8) = used_chars.to_ullong();
+        used_chars.reset();
+    }
+
+    output_i += used_chars_size;
+
+    // saving char counts
+    uint32_t saved = 0;
+    for (uint32_t i=0; i < 256; ++i) {
+        if (counter[i] != 0) {
+            for (int j=0; j < 3; ++j) { // 24 bits will be enough, since block size is limited to at most 16 MiB
+                *(output + output_i + (saved)*3 +j) = *((uint8_t*)&counter + 4*i+j);
+            }
+            ++saved;
+        }
+    }
+    output_i += saved*3;
+
+    assert(output_i == sizeof(size) + used_chars_size + model_size);
+
+
+    // saving states produced by the encoder
+    for (uint32_t i=0; i < stack_i; ++i) {
+        *reinterpret_cast<uint32_t*>(output + output_i + i*4) = stack[i];
+    }
+
+    std::swap(text, output);
+    std::swap(size, output_size);
+
+    delete[] output;
+    delete[] stack;
+}
+
+
+void Compression::rANS_reverse()
+{
+    // Loosely based on a paper by James Townsend at https://arxiv.org/pdf/2001.09186.pdf
+
+    // loading original size
+    uint32_t original_size = *reinterpret_cast<uint32_t*>(text);
+
+    // loading info about which chars were used
+    bool char_used[256] = {};
+    uint16_t used_char_count = 0;   // contains info about how many different chars were used
+    for (int i=0; i < 4; ++i) {
+        std::bitset<64> used(*reinterpret_cast<uint64_t*>(text+4+8*i));
+        for (int j=0; j < 64; ++j) {
+            char_used[i*64 + j] = used[j];
+        }
+        used_char_count += used.count();
+    }
+
+    // now that we know how many char counts to expect, we can load them, and prepare char2index table
+    auto* index2char = new uint8_t [used_char_count]();
+
+    uint16_t used_found = 0;
+    std::vector<uint64_t> PMF;  // PMF - Probability Mass Function
+    // we'll load char counts into PMF and then, normalize them to get PMF used during encoding
+
+    for (int i=0; i < 256; ++i) {
+        if (char_used[i]) {
+            // character counts are 3 bytes wide, so we'll mask off the 4th byte
+            PMF.emplace_back(*reinterpret_cast<uint32_t*>(text + 4 + 32 + 3 * used_found) & 0x00FFFFFF);
+
+            index2char[used_found] = i;
+            ++used_found;
+        }
+    }
+    const uint64_t limit = 1ull << 32;
+
+    model::ANS::normalize_frequencies(PMF, limit);
+
+    std::vector<uint64_t> CMF(used_found + 1, 0);   // CMF - Cumulative Mass Function
+    for (int i=0; i < PMF.size(); ++i) CMF[i + 1] = CMF[i] + PMF[i];
+
+    auto* stack = reinterpret_cast<uint32_t*>(text + sizeof(size) + 32 + 3 * used_found);
+    uint32_t stack_i = (size - (4 + 32 + 3 * used_found)) / 4;
+
+    // loading the last state during encoding
+    uint64_t state = stack[--stack_i];
+    state <<= 32;
+    state += stack[--stack_i];
+
+
+    auto* decoded = new uint8_t [original_size]();
+
+    // decoding
+    for (uint32_t it=0; it < original_size; ++it) {
+        uint64_t state_mod = state & 0xFFFFFFFF;    // equal to state % limit, but faster
+        // Using reminder from division of state by limit, we can determine which sign was used to generate this state,
+        // by looking into which cumulative probability it falls into
+        uint64_t i = std::upper_bound(CMF.begin(), CMF.end(), state_mod) - CMF.begin() - 1;    // crime against performance
+
+        uint64_t previous_state = PMF[i] * (state >> 32) + state_mod - CMF[i]; // this is somehow faster than just overwriting state
+        // at least according to cachegrind
+
+        // if state has space for another element from stack (likely)
+        if (previous_state < limit) {
+            previous_state = (previous_state << 32) + stack[--stack_i];
+            // while state has space for another element from stack (unlikely)
+            while (previous_state < limit) {
+                // pop an element t_top from stack stack
+                // and push t_top into the lower bits of state
+                previous_state = (previous_state << 32) + stack[--stack_i];
+            }
+        }
+        state = previous_state;
+
+        decoded[it] = index2char[i];    // retranslating index extracted from state into the usual ASCII
+    }
+
+    std::swap(decoded, text);
+    std::swap(size, original_size);
+
+    delete[] decoded;
+    delete[] index2char;
 }
 
 
@@ -1265,117 +1453,16 @@ void Compression::AES128_make(uint8_t key[], uint32_t key_size, uint8_t iv[], ui
         delete[] prepended_with_metadata;
     }
 
-    /*std::mt19937 gen(std::random_device{}());
 
-    uint32_t salt_size = crypto::PBKDF2::saltSize;
-    auto* salt = new uint8_t [salt_size]();
-
-    crypto::fill_with_random_data(salt, salt_size, gen);
-    print_arr_8(salt, salt_size, "PBKDF2 salt:");
-
-    uint32_t aes128_key_size = 16;
-    uint32_t iterations_size = 8;
-    auto iterations = static_cast<uint64_t>(crypto::PBKDF2::iteration_count::debug);
-    std::cout << "Iterations: " << iterations << std::endl;
-    // uint32_t iterations = 1000;
-
-    std::cout << "Deriving key...\t" << std::flush;
-    std::string pkey = crypto::PBKDF2::HMAC_SHA256(pw, salt, salt_size, iterations, aes128_key_size, *this->aborting_var);
-    std::cout << "Done" << std::endl;
-
-    print_arr_8((uint8_t *) pkey.c_str(), pkey.length(), "PBKDF2 result:");
-
-    auto* rkey = new uint8_t [aes128_key_size]();
-    crypto::fill_with_random_data(rkey, aes128_key_size, gen);
-    print_arr_8(rkey, aes128_key_size, "Random key:");
-
-
-
-
-    const uint32_t iv_size = 16;
-    uint8_t iv_text[iv_size] = {};
-    crypto::fill_with_random_data(iv_text, iv_size, gen);
-    print_arr_8(iv_text, iv_size, "iv for text:");
-
-    std::cout << "AES128'ing text...\t" << std::flush;
-    comp.AES128_make(rkey, iv_text);
-    std::cout << "Done" << std::endl;
-
-    Compression comp2(fake);
-    delete[] comp2.text;
-    comp2.size = aes128_key_size;
-    comp2.text = new uint8_t [comp2.size]();
-
-    uint8_t iv_pw[iv_size] = {};
-    crypto::fill_with_random_data(iv_pw, iv_size, gen);
-    print_arr_8(iv_pw, iv_size, "iv for password:");
-
-
-    for (uint32_t i=0; i < comp2.size; ++i)
-        comp2.text[i] = rkey[i];
-
-    comp2.AES128_make((uint8_t*) pkey.c_str(), iv_pw);
-    print_arr_8(comp2.text + 16, 16, "Encrypted random key:");
-
-    std::cout << "HMAC'ing encrypted random key...\t" << std::flush;
-    std::string encrypted_rkey_hmac = crypto::HMAC::SHA256(comp2.text, comp2.size, (uint8_t*) rkey, aes128_key_size, fake);
-    std::cout << "Done" << std::endl;
-    print_arr_8((uint8_t *) encrypted_rkey_hmac.c_str(), encrypted_rkey_hmac.length(), "HMAC:");
-
-    //*
-    uint64_t extended_size = salt_size + iterations_size + comp2.size + encrypted_rkey_hmac.length() + comp.size;
-    uint64_t saving_offset = 0;
-    auto* text2 = new uint8_t [extended_size]();
-
-
-    // Saving
-
-    for (uint64_t i=0; i < salt_size; ++i) {                        // saving salt
-        text2[i] = salt[i];
-    }
-    saving_offset += salt_size;
-
-    for (uint64_t i=0; i < iterations_size; ++i) {                  // saving the number of iterations
-        text2[saving_offset + i] = (uint8_t) (iterations >> (i * 8u)) & 0xFFu;
-    }
-    saving_offset += iterations_size;
-
-    for (uint64_t i=0; i < comp2.size; ++i) {                       // saving encrypted random key
-        text2[saving_offset + i] = (uint8_t) comp2.text[i];
-    }
-    saving_offset += comp2.size;
-
-    for (uint64_t i=0; i < encrypted_rkey_hmac.length(); ++i) {     // saving HMAC-SHA256(encrypted_rkey, pkey)
-        text2[saving_offset + i] = (uint8_t) encrypted_rkey_hmac[i];
-    }
-    saving_offset += encrypted_rkey_hmac.length();
-
-
-    for (uint64_t i=0; i < comp.size; ++i) {                        // saving text, which is encrypted using rkey
-        text2[saving_offset + i] = comp.text[i];
-    }
-    saving_offset += comp.size;
-
-    assert(saving_offset == extended_size);
-
-    std::swap(comp.text, text2);
-    delete[] text2;
-
-    comp.size = extended_size;
-
-    std::fstream fout("/home/pc/Desktop/encrypted.aes", std::ios::binary | std::ios::out);
-    assert(fout.is_open());
-
-    delete[] rkey;
-    delete[] salt;
-    */
 }
+
 
 void Compression::AES128_reverse(uint8_t key[], uint32_t key_size) {
     uint64_t temp_size = this->size;    // without this, casting the value to uint64_t will cause a bug
     crypto::AES128::decrypt(this->text, temp_size, key, key_size);
     this->size = temp_size;
 }
+
 
 void Compression::AES128_extract_metadata(uint8_t *&metadata, uint32_t &metadata_size) {
     assert(part_id == 0);
@@ -1393,6 +1480,7 @@ void Compression::AES128_extract_metadata(uint8_t *&metadata, uint32_t &metadata
     this->size -= metadata_size;
 }
 
+
 bool Compression::AES128_verify_password_str(std::string& pw, uint8_t *metadata, uint32_t metadata_size) {
     assert(metadata_size == proper_metadata_size);
     const uint32_t aes128_key_size = 16;
@@ -1406,7 +1494,6 @@ bool Compression::AES128_verify_password_str(std::string& pw, uint8_t *metadata,
         salt[i] = metadata[i];
     }
     loading_offset += salt_size;
-    print_arr_8(salt, salt_size, "Salt:");
 
     const uint32_t iterations_size = 8;
     uint64_t iterations = 0;        // needs to be 8 bytes long!
@@ -1422,8 +1509,6 @@ bool Compression::AES128_verify_password_str(std::string& pw, uint8_t *metadata,
     std::string pkey = crypto::PBKDF2::HMAC_SHA256(pw, salt, salt_size, iterations, aes128_key_size, *this->aborting_var);
     std::cout << "Done" << std::endl;
 
-    print_arr_8((uint8_t *) pkey.c_str(), pkey.length(), "Derived key:");
-
     uint64_t encrypted_key_size = 16+16;    // 0-15 - IV, 16-31 - ciphertext
     auto* encrypted_key = new uint8_t [encrypted_key_size];
     for (uint32_t i=0; i < encrypted_key_size; ++i) {
@@ -1431,18 +1516,11 @@ bool Compression::AES128_verify_password_str(std::string& pw, uint8_t *metadata,
     }
 
 
-
-    print_arr_8(encrypted_key, 16, "IV for random key:");
-    print_arr_8(encrypted_key + 16, 16, "Encrypted random key:");
-
     crypto::AES128::decrypt(encrypted_key, encrypted_key_size, (uint8_t*) pkey.c_str(), pkey.length());
-
-    print_arr_8(encrypted_key, encrypted_key_size, "Decrypted random key:");
 
     uint32_t hmac_size = 32;
     std::string generated_hmac = crypto::HMAC::SHA256(metadata + salt_size + iterations_size, hmac_size,
                                                       encrypted_key, encrypted_key_size, *this->aborting_var);
-
 
     auto* hmac = new uint8_t [hmac_size];
 
@@ -1450,9 +1528,6 @@ bool Compression::AES128_verify_password_str(std::string& pw, uint8_t *metadata,
     for (uint64_t i=0; i < hmac_size; ++i) {                            // loading HMAC-SHA256
         hmac[i] = metadata[loading_offset++];
     }
-
-    print_arr_8(hmac, hmac_size, "loaded HMAC:");
-    print_arr_8((uint8_t *) generated_hmac.c_str(), generated_hmac.size(), "our HMAC:");
 
     bool correct_password = true;
 
@@ -1467,7 +1542,6 @@ bool Compression::AES128_verify_password_str(std::string& pw, uint8_t *metadata,
     delete[] encrypted_key;
     return correct_password;
 }
-
 
 
 

@@ -126,15 +126,10 @@ namespace dc3
         }
 
 
-        uint32_t B12_max = B12_sorted[B12_size - 1];
-
-        // t0 = std::chrono::high_resolution_clock::now();
 
         counting_sort_indices(B12_sorted, translated, B12_size, max_letter, 2);
         counting_sort_indices(B12_sorted, translated, B12_size, max_letter, 1);
         counting_sort_indices(B12_sorted, translated, B12_size, max_letter, 0);
-
-        // g_counting_sort_1 += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - t0).count();
 
         auto rank_array = new uint32_t [B12_size]();
         bool repeats = false;
@@ -143,7 +138,6 @@ namespace dc3
 
         rank_array[0] = 1;
 
-        // t0 = std::chrono::high_resolution_clock::now();
         for (uint32_t i=1; i < B12_size; ++i)
         {
             // looking for repeats within sorted text, they should obviously be next to each other
@@ -162,8 +156,6 @@ namespace dc3
             translation_ranked[B12_sorted[i]] = rank_array[i];
         }
         delete[] rank_array;
-
-        // g_ranking += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - t0).count();
 
         if (repeats)    // 2 indices cannot have the same rank, so we need to address this issue
         {
@@ -187,11 +179,8 @@ namespace dc3
             delete[] translation_ranked;
 
 
-
             DC3_recursion(renamed_with_ranks, sorted_ranks, sorted_ranks_size, current_rank);
-            // std::cout << "Recursion complete!\n" << std::endl;
 
-            // delete[] renamed_with_ranks;
             B12_sorted = new uint32_t [B12_size];
 
             for (uint32_t i=1; i < sorted_ranks_size; ++i)
@@ -215,15 +204,10 @@ namespace dc3
         auto B0_sorted = new uint32_t [B0_size];
         for (uint32_t i=0; i < B0_size; ++i) B0_sorted[i] = i*3;
 
-        uint32_t max_rank = size;
-
-        // t0 = std::chrono::high_resolution_clock::now();
         // sort by rank of next suffix (which is always in B12, and we've sorted these already)
         counting_sort_indices(B0_sorted, translation_ranked, B0_size, size, 1);
         // sort by current letter
         counting_sort_indices(B0_sorted, translated, B0_size, max_letter, 0);
-
-        // g_counting_sort_2 += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - t0).count();
 
         // Both B0 and B12 are sorted now. Time to merge them into SA.
         // b0_i and b12_i will be our iterators for this process
@@ -231,8 +215,6 @@ namespace dc3
         uint32_t b12_i = 0;
 
         SA = new uint32_t [size+1];
-
-        // t0 = std::chrono::high_resolution_clock::now();
 
         uint32_t i=0;
         for (; b0_i != B0_size and b12_i != B12_size; ++i) {
@@ -294,8 +276,6 @@ namespace dc3
                 SA[i++] = B0_sorted[bi++];
             }
         }
-
-        // g_merging += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - t0).count();
 
         delete[] translation_ranked;
         delete[] translated;
