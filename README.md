@@ -30,10 +30,10 @@ Zrobione:
 - 15.04.2021 - Implementacja AES
 - 22.04.2021 - Dodanie HMAC i KDF
 - 13.05.2021 - Modyfikacje pozwalające na zaszyfrowanie i odszyfrowanie pliku z poziomu GUI
-Do zrobienia:
 - 27.05.2021 - Implementacja ranged Asymmetric Numeral Systems (rANS)
 
 Opcjonalne dodatki do implementacji po zakończeniu głównych założeń projektu:
 
+Do zrobienia:
 - 10.06.2021 - Optymalizacja dodanych algorytmów
 - 17.06.2021 - Ponowna refaktoryzacja, ogólne poprawienie jakości i czytelności nowego kodu
