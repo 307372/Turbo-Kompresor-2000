@@ -9,21 +9,21 @@ Z algorytmów kompresji bezstratnej:
 - move-to-front
 - run-length encoding
 - arithmetic coding (2 wersje)
+- Asymmetric Numeral Systems (range variant)
 
 Do sprawdzania poprawności działania, zastosowałem:
 - CRC32
 - SHA-1
 - SHA-256
 
+Szyfrowanie jest realizowane za pomocą AES-128 CTR
+
 ## 3. Co jest potrzebne do skompilowania tego programu?
 - C++20 (stosowałem g++)
-- Qt 6.0.0
+- Qt6
 - libdivsufsort
 
-## 4. Co jest w planach na najbliższe miesiące?
-- Mam zamiar dodać dodać rANS.
-
-## 5. Harmonogram pracy
+## 4. Harmonogram pracy
 Zrobione:
 - 16.03.2021 - Przygotowanie kodu do tego projektu - refaktoryzacja
 - 01.04.2021 - Implementacja DC3 / Skew lub innego algorytmu generowania suffix array działającego w O(n) i opracowanie wersji transformaty Burrowsa-Wheelera niewymagającej podwojenia danych wejściowych do poprawnego działania
