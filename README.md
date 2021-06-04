@@ -31,9 +31,9 @@ Zrobione:
 - 22.04.2021 - Dodanie HMAC i KDF
 - 13.05.2021 - Modyfikacje pozwalające na zaszyfrowanie i odszyfrowanie pliku z poziomu GUI
 - 27.05.2021 - Implementacja ranged Asymmetric Numeral Systems (rANS)
-
-Opcjonalne dodatki do implementacji po zakończeniu głównych założeń projektu:
+- 10.06.2021 - Optymalizacja dodanych algorytmów
 
 Do zrobienia:
-- 10.06.2021 - Optymalizacja dodanych algorytmów
+
+Opcjonalne dodatki do implementacji po zakończeniu głównych założeń projektu:
 - 17.06.2021 - Ponowna refaktoryzacja, ogólne poprawienie jakości i czytelności nowego kodu
