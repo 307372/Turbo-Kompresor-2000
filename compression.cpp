@@ -1,12 +1,10 @@
 #include "compression.h"
 
-#include <iostream>
 #include <list>
 #include <climits>
 #include <cmath>
 #include <cassert>
 #include <vector>
-#include <wmmintrin.h>
 #include <bitset>
 
 #include <divsufsort.h> // external library
@@ -27,7 +25,7 @@ Compression::~Compression() {
 }
 
 
-void Compression::load_text( std::fstream &input, uint64_t text_size )
+void Compression::load_text(std::fstream &input, uint64_t text_size)
 {
     if (!*aborting_var) {
         delete[] this->text;
@@ -57,7 +55,7 @@ void Compression::load_part(std::fstream &input, uint64_t text_size, uint32_t pa
 }
 
 
-void Compression::save_text( std::fstream &output ) {
+void Compression::save_text(std::fstream &output) {
     if (!*aborting_var) output.write((char*)(this->text), this->size);
 }
 
@@ -111,9 +109,9 @@ void Compression::BWT_make()
 
 
 void Compression::BWT_reverse()
-{   // Using L-PBKDF2_HMAC_SHA256_get_block mapping
+{   // Using L-F mapping
     if (!*aborting_var) {
-        uint32_t encoded_length = this->size-4; // subtracting 4 bits due to 4 last bits being starting position
+        uint32_t encoded_length = size-4; // subtracting 4 bits due to 4 last bits being starting position
 
         // read EOF position from last 4 bits
         uint32_t eof_position = ((uint32_t)this->text[encoded_length]) | ((uint32_t)this->text[encoded_length+1]<<8u) | ((uint32_t)this->text[encoded_length+2]<<16u) | ((uint32_t)this->text[encoded_length+3]<<24u);
@@ -266,7 +264,7 @@ void Compression::BWT_make2()
 
 
 void Compression::BWT_reverse2()
-{   // Using L-PBKDF2_HMAC_SHA256_get_block mapping
+{   // Using L-F mapping
 
     if (!*aborting_var) {
         uint32_t encoded_length = this->size-4; // subtracting 4 bits due to 4 last bits being starting position
@@ -362,21 +360,19 @@ void Compression::MTF_make()
             }
         }
 
-        auto output = new uint8_t [textlength+32];  //+256 bits appended to include alphabet after encoded data
-
-
+        auto output = new uint8_t [textlength+32];  // +256 bits appended to include alphabet after encoded data
 
         for (uint32_t i=0; i < textlength and !*aborting_var; i++) {
             // finding current letter's place in alphabet
             uint16_t letter_position = 0;
             std::_List_iterator<uint8_t> iter = alphabet.begin();
             while( *iter != this->text[i] ) {
-                letter_position++;
-                iter++;
+                ++letter_position;
+                ++iter;
             }
-            // moving said letter to front
 
-            if ( iter != alphabet.begin() ) {
+            // moving said letter to front
+            if ( iter != alphabet.begin() ) {   // unless it's already there
                 alphabet.erase(iter);
                 alphabet.push_front(this->text[i]);
             }
@@ -390,8 +386,7 @@ void Compression::MTF_make()
             return;
         }
 
-
-
+        // saving the information about which chars were found
         for ( uint32_t i=0; i < 32; ++i ) {
             uint16_t alphabet_data=0;
             for ( uint16_t k=0; k < 8; ++k ) {
@@ -407,12 +402,9 @@ void Compression::MTF_make()
             return;
         }
 
-        delete[] this->text;
-        this->text = new uint8_t [textlength+32];
-
-        for (uint32_t i=0; i < textlength+32 and !*aborting_var; ++i) this->text[i] = output[i];
-        delete[] output;
+        std::swap(text, output);
         this->size = textlength+32;
+        delete[] output;
     }
 }
 
@@ -425,9 +417,9 @@ void Compression::MTF_reverse()
         // interpreting alphabet information from last 256 bits of encoded data
         std::list<uint8_t> alphabet;
         for ( uint32_t i=0; i < 32; ++i ) {
-            uint8_t alphabet_data=this->text[textlength+i];
+            uint8_t alphabet_data = this->text[textlength+i];
             for ( uint16_t k=8; k >= 1; --k ) {
-                if (( ( alphabet_data >> (k-1u) ) & 0x01u) == 1 )  alphabet.emplace_back( i*8 + 8-k);   // may or may not be broken in several ways
+                if (( alphabet_data >> (k-1u) ) & 0x01u)  alphabet.emplace_back( i*8 + 8-k);
             }
         }
 
@@ -440,7 +432,6 @@ void Compression::MTF_reverse()
             std::_List_iterator<uint8_t> iter = alphabet.begin();
             for (uint16_t j=0; j < this->text[i]; ++j) {
                 iter++;
-
             }
             // moving said letter to front
 
@@ -449,8 +440,7 @@ void Compression::MTF_reverse()
                 alphabet.erase(iter);
             }
 
-            //writing letter to output
-
+            // writing letter to output
             output[i] = *alphabet.begin();
         }
 
@@ -459,31 +449,29 @@ void Compression::MTF_reverse()
             return;
         }
 
-        delete[] this->text;
-        this->text = new uint8_t [textlength];
-
-        for (uint32_t i=0; i < textlength; ++i) this->text[i] = output[i];
-        delete[] output;
-
+        std::swap(text, output);
         this->size = textlength;
+
+        delete[] output;
     }
 }
-
 
 void Compression::RLE_make()
 {
     if (!*aborting_var) {
-        uint32_t textlength = 1+this->size; // first bit encodes whether or not RLE was used
+        uint32_t textlength = 1 + size; // first byte encodes whether or not RLE was used
 
         std::string output;
+        output.reserve(size);
+
         output += (char)0xFF;   //indication that RLE was indeed used
         bool RLE_used = true;
 
         uint8_t counter = 0;
-        for (uint32_t i=1; i<textlength and !*aborting_var; ++i) {
+        for (uint32_t i=1; i < textlength and !*aborting_var; ++i) {
             counter++;
-            if (this->text[i-1] != this->text[i] or counter == 255) {
-                output += this->text[i-1];
+            if (text[i-1] != text[i] or counter == 255) {
+                output += text[i-1];
                 output += counter;
                 counter = 0;
             }
@@ -491,31 +479,33 @@ void Compression::RLE_make()
 
         if (*aborting_var) return;
 
-        if ( output.length()*3 > this->size*2 ) {    // if RLE improves compression by less than 1/3 this-size bytes, then:
+        if ( output.length()*3 > size*2 ) {    // if RLE improves compression by less than 1/3 this-size bytes, then:
             RLE_used = false;
         }
 
         if( RLE_used ) {
             if (counter != 0) {
-                output += this->text[textlength-1];
+                output += text[textlength-1];
                 output += counter;
             }
 
-            delete[] this->text;
-            this->text = new uint8_t [output.length()];
-            for (uint32_t i=0; i<output.length() and !*aborting_var; ++i) this->text[i] = output[i];
+            delete[] text;
+            text = new uint8_t [output.length()];
+            for (uint32_t i=0; i < output.length() and !*aborting_var; ++i) {
+                text[i] = output[i];
+            }
 
-            this->size = output.length();
+            size = output.length();
         }
         else {
-            auto temp = new uint8_t [1+this->size];
+            auto temp = new uint8_t [1+size];
             temp[0] = 0x00;
-            for (uint32_t i=0; i < this->size and !*aborting_var; ++i) temp[i+1] = this->text[i];
-            delete[] this->text;
-            this->text = new uint8_t [1+this->size];
-            for (uint32_t i=0; i < 1+this->size and !*aborting_var; ++i) this->text[i] = temp[i];
+            for (uint32_t i=0; i < size and !*aborting_var; ++i) {
+                temp[i+1] = text[i];
+            }
+            std::swap(text, temp);
             delete[] temp;
-            this->size++;
+            size++;
         }
     }
 }
@@ -524,35 +514,39 @@ void Compression::RLE_make()
 void Compression::RLE_reverse()
 {
     if (!*aborting_var) {
-        if (this->text[0] == 0xFF) {
+        if (text[0] == 0xFF) {
 
             std::string output;
-            for (uint32_t i=1; i < this->size and !*aborting_var; i+=2 ) {
-                for (uint32_t j=0; j < this->text[i+1]; j++ ) output += this->text[i];
+            output.reserve(size);
+
+            for (uint32_t i=1; i < size and !*aborting_var; i+=2 ) {
+                for (uint32_t j=0; j < text[i+1]; j++ ) output += text[i];
             }
 
             if (*aborting_var) return;
 
-            delete[] this->text;
-            this->text = new uint8_t [output.length()];
-            for (uint32_t i=0; i<output.length() and !*aborting_var; ++i) this->text[i] = output[i];
+            delete[] text;
+            text = new uint8_t [output.length()];
+            for (uint32_t i=0; i<output.length() and !*aborting_var; ++i)
+                text[i] = output[i];
 
-            this->size = output.length();
+            size = output.length();
         }
-        else if (this->text[0] == 0x00) {
-            auto temp = new uint8_t [this->size-1];
-            for (uint32_t i=0; i<this->size-1 and !*aborting_var; ++i) temp[i] = this->text[i+1];
+        else if (text[0] == 0x00) {
+            auto temp = new uint8_t [size-1];
+            for (uint32_t i=0; i < size-1; ++i) {
+                temp[i] = text[i+1];
+            }
 
             if (*aborting_var) {
                 delete[] temp;
                 return;
             }
 
-            delete[] this->text;
-            this->text = new uint8_t [this->size-1];
-            for (uint32_t i=0; i<this->size-1 and !*aborting_var; ++i) this->text[i] = temp[i];
+            std::swap(temp, text);
+
             delete[] temp;
-            this->size--;
+            size--;
 
         }
         else throw std::invalid_argument("RLE was neither used nor not used, apparently");
@@ -563,56 +557,65 @@ void Compression::RLE_reverse()
 void Compression::RLE_makeV2()
 {
     if (!*aborting_var) {
-        uint32_t textlength = 1+this->size; // first bit encodes whether or not RLE was used
+        uint32_t textlength = 1 + size; // first byte encodes whether or not RLE was used
 
         std::string output_run_length;
+        output_run_length.reserve(size);
+
         std::string output_chars;
-        output_run_length += (char)0xFF;   //indication that RLE was indeed used
+        output_chars.reserve(size);
+
+        output_run_length += (char)0xFF;   // indication that RLE was indeed used
         bool RLE_used = true;
 
         uint8_t counter = 0;
         for (uint32_t i=1; i<textlength; ++i) {
             counter++;
-            if (this->text[i-1] != this->text[i] or counter == 255) {
-                output_chars += this->text[i-1];
+            if (text[i-1] != text[i] or counter == 255) {
+                output_chars += text[i-1];
                 output_run_length += counter;
                 counter = 0;
                 if (*aborting_var) return;
             }
         }
 
-        if ( (output_chars.length() + output_run_length.length())*3 > this->size*2 ) {    // if RLE improves compression by less than 1/3 this-size bytes, then:
+        if ( (output_chars.length() + output_run_length.length())*3 > size*2 ) {    // if RLE improves compression by less than 1/3 this-size bytes, then:
             RLE_used = false;
         }
 
         if( RLE_used ) {
             if (counter != 0) {
-                output_chars += this->text[textlength-1];
+                output_chars += text[textlength-1];
                 output_run_length += counter;
             }
 
-            delete[] this->text;
-            this->text = new uint8_t [output_run_length.length() + output_chars.length()];
-            for (uint32_t i=0; i<output_run_length.length(); ++i) this->text[i] = output_run_length[i];
+            delete[] text;
+            text = new uint8_t [output_run_length.length() + output_chars.length()];
+            for (uint32_t i=0; i<output_run_length.length(); ++i) {
+                text[i] = output_run_length[i];
+            }
 
             if (*aborting_var) return;
 
-            for (uint32_t i=0; i<output_chars.length(); ++i) this->text[output_run_length.length()+i] = output_chars[i];
+            for (uint32_t i=0; i<output_chars.length(); ++i) {
+                text[output_run_length.length()+i] = output_chars[i];
+            }
 
-            this->size = output_run_length.length() + output_chars.length();
+            size = output_run_length.length() + output_chars.length();
         }
         else {
-            auto temp = new uint8_t [1+this->size];
+            auto temp = new uint8_t [1 + size];
             temp[0] = 0x00;
-            for (uint32_t i=0; i < this->size; ++i) temp[i+1] = this->text[i];
+            for (uint32_t i=0; i < size; ++i) {
+                temp[i+1] = text[i];
+            }
 
             if (*aborting_var) return;
 
-            delete[] this->text;
-            this->text = new uint8_t [1+this->size];
-            for (uint32_t i=0; i < 1+this->size; ++i) this->text[i] = temp[i];
+            std::swap(temp, text);
+
+            size++;
             delete[] temp;
-            this->size++;
         }
     }
 }
@@ -621,44 +624,45 @@ void Compression::RLE_makeV2()
 void Compression::RLE_reverseV2()
 {
     if (!*aborting_var) {
-        if (this->text[0] == 0xFF) {
-
+        if (text[0] == 0xFF) {  // if RLE was used
             std::string output;
-            uint32_t RLE_size = (this->size-1)/2;
+            output.reserve(size);
+
+            uint32_t RLE_size = (size-1)/2;
             for (uint32_t i=0; i < RLE_size; ++i ) {
-                for (uint32_t j=0; j < this->text[1+i]; j++ ) output += this->text[1+RLE_size+i];
+                for (uint32_t j=0; j < text[1+i]; j++ ) output += text[1+RLE_size+i];
             }
 
             if (*aborting_var) return;
 
-            delete[] this->text;
-            this->text = new uint8_t [output.length()];
-            for (uint32_t i=0; i<output.length(); ++i) this->text[i] = output[i];
+            delete[] text;
+            text = new uint8_t [output.length()];
+            for (uint32_t i=0; i < output.length(); ++i) {
+                text[i] = output[i];
+            }
 
-            this->size = output.length();
+            size = output.length();
         }
-        else if (this->text[0] == 0x00) {
-            auto temp = new uint8_t [this->size-1];
-            for (uint32_t i=0; i<this->size-1; ++i) temp[i] = this->text[i+1];
+        else if (text[0] == 0x00) { // if RLE wasn't used
+            auto temp = new uint8_t [size-1];
+            for (uint32_t i=0; i < size-1; ++i) {
+                temp[i] = text[i+1];
+            }
 
             if (*aborting_var) return;
 
-            delete[] this->text;
-            this->text = new uint8_t [this->size-1];
-            for (uint32_t i=0; i<this->size-1; ++i) this->text[i] = temp[i];
-            delete[] temp;
-            this->size--;
+            std::swap(text, temp);
 
+            delete[] temp;
+            size--;
         }
         else throw std::invalid_argument("RLE was neither used nor not used, apparently");
-
     }
 }
 
 
 void Compression::AC_make()
 {
-
     if (!*aborting_var) {
         //  arithmetic coding - file size version
         //  based on algorithm from youtube (Information Theory playlist by mathematicalmonk, IC 5)
@@ -669,270 +673,258 @@ void Compression::AC_make()
         uint64_t quarter = roundl(wholed / 4.0);
 
 
-        std::vector<uint64_t> r = model::AC::memoryless(this->text, this->size);
+        std::vector<uint64_t> r = model::AC::memoryless(text, size);
 
         if (*aborting_var) return;
 
         uint16_t r_size = 256;
         std::string output(4+4+r_size*4, 0);    // leaving 4 bits for compressed data size
+        output.reserve(size);
 
 
-        for (uint8_t i=0; i < 4; i++) {
-            output[4+i] = (uint8_t)( this->size >> (i*8u)) & 0xFFu;
-        }
+        // saving original size on bits 4-7
+        *(uint32_t*)(output.c_str()+4) = size;
 
-        std::vector<uint64_t> c;
-        std::vector<uint64_t> d;
-        for (uint16_t i=0; i < r_size; i++) {
-            output[8 + 4 * i] = r[i] & 0xFFu;
-            output[8 + 4 * i + 1] = (r[i] >> 8u) & 0xFFu;
-            output[8 + 4 * i + 2] = (r[i] >> 16u) & 0xFFu;
-            output[8 + 4 * i + 3] = (r[i] >> 24u) & 0xFFu;
+        // cumulative mass functions
+        std::vector<uint64_t> lower_bound(1, 0);  // vectors of lower and upper bounds for each char
+        std::vector<uint64_t> upper_bound;
 
-            // generate c and d, where c[i] is lower bound to get i-th letter of our alphabet, and d[i] is the upper bound
-            uint64_t sum = 0;
-            std::for_each(std::begin(r), std::begin(r)+i, [&] (uint64_t j) {sum += j;} );
-            c.push_back(sum);
-            if (i != r_size-1)
-                d.push_back(sum+r[i]);
-            else
-                d.push_back(whole);
+        uint8_t indexOfChars[256]={};   // given char, returns it'state index in lower_bound and upper_bound
+
+        {
+            uint16_t used_chars_ctr = 0;
+            auto* output_arr_32b = (uint32_t*)(output.c_str()+8);
+            for (uint16_t i = 0; i < r_size; i++) {
+                // saving probabilities
+                output_arr_32b[i] = r[i];
+
+                if (r[i] != 0) {    // if character "i" exists in the model
+                    // add this char'state probabilities to CMFs
+                    lower_bound.emplace_back(lower_bound[used_chars_ctr] + r[i]);
+                    upper_bound.emplace_back(lower_bound[used_chars_ctr+1]);
+
+                    // adding char to index and incrementing the amount of used chars
+                    indexOfChars[i] = used_chars_ctr++;
+                }
+            }
         }
 
         //check if sum of probabilities represented as UINT_MAX is equal to whole
-        if (true)
-        {
-            uint64_t sum = 0;
-            for (auto& n : r)
-                sum += n;
-            assert(sum == whole);
-        }
+        assert(std::accumulate(r.begin(), r.end(), 0ull) == whole);
 
         //Actual encoding
-        uint64_t a = 0;
-        uint64_t b = whole;
-        uint64_t w = 0;
-        uint32_t s = 0;
+        uint64_t low = 0;
+        uint64_t high = whole;
+        uint64_t width;
+        uint32_t state = 0;
 
-        TextWriteBitbuffer bitout(output );
+        TextWriteBitbuffer bitout(output);
 
-
-
-        for (uint32_t i = 0; i <this->size and !*aborting_var; ++i)
+        for (uint32_t i = 0; i < size and !*aborting_var; ++i)
         {
-            w = b - a;
-            b = a + roundl(((uint64_t)(d[this->text[i]]*w))/wholed); //potential rounding errors
-            a = a + roundl(((uint64_t)(c[this->text[i]]*w))/wholed);
+            width = high - low;
+            high = low + roundl(((uint64_t)(upper_bound[indexOfChars[text[i]]] * width)) / wholed);
+            low = low + roundl(((uint64_t)(lower_bound[indexOfChars[text[i]]] * width)) / wholed);
 
-            assert( a<whole and b<=whole );
-            assert( a<b );
+            assert(low < whole and high <= whole);
+            assert(low < high);
 
-            while (b < half or a >= half)
+            while (high < half or low >= half)
             {
-                if (b < half)
+                if (high < half)
                 {
                     bitout.add_bit_0();
-                    for (uint32_t j = 0; j < s; j++) bitout.add_bit_1();
+                    for (uint32_t j = 0; j < state; ++j) bitout.add_bit_1();
 
-                    s = 0;
-                    a *= 2;
-                    b *= 2;
+                    state = 0;
+                    low *= 2;
+                    high *= 2;
                 }
-                else if (a >= half)
+                else if (low >= half)
                 {
-
                     bitout.add_bit_1();
-                    for (uint32_t j = 0; j < s; j++) bitout.add_bit_0();
+                    for (uint32_t j = 0; j < state; ++j) bitout.add_bit_0();
 
-                    s = 0;
-                    a = 2 * (a-half);
-                    b = 2 * (b-half);
+                    state = 0;
+                    low = 2 * (low - half);
+                    high = 2 * (high - half);
                 }
             }
-            while (a >= quarter and b < 3*quarter)
+
+            while (low >= quarter and high < 3 * quarter)
             {
-                s++;
-                a = 2 * (a-quarter);
-                b = 2 * (b-quarter);
+                state++;
+                low = 2 * (low - quarter);
+                high = 2 * (high - quarter);
             }
         }
 
-        s++;
-        if (a <= quarter)
+        state++;
+        if (low <= quarter)
         {
             bitout.add_bit_0();
-            for (uint32_t j = 0; j < s; j++) bitout.add_bit_1();
+            for (uint32_t j = 0; j < state; j++) bitout.add_bit_1();
         }
         else
         {
             bitout.add_bit_1();
-            for (uint32_t j = 0; j < s; j++) bitout.add_bit_0();
+            for (uint32_t j = 0; j < state; j++) bitout.add_bit_0();
         }
 
         bitout.flush();
 
         if (*aborting_var) return;
 
-        for (uint8_t i=0; i < 4; i++) { // filling first 4 bits of output with compressed data size in   B I T S
-            output[i] = (uint8_t)( (uint32_t)bitout.get_output_size() >> (i*8u)) & 0xFFu;
+        // filling first 4 bits of output with compressed data size in   B I T S
+        *(uint32_t*)(output.c_str()) = bitout.get_output_size();
+
+        size = output.length();
+        delete[] text;
+
+        text = new uint8_t [size];
+        for (uint32_t i=0; i < size; ++i) {
+            text[i] = output[i];
         }
-
-        this->size = output.length();
-
-        delete[] this->text;
-        this->text = new uint8_t [this->size];
-
-        for (uint32_t i=0; i < this->size; ++i) this->text[i] = output[i];
     }
 }
 
 
 void Compression::AC_reverse()
 {
-
-    if (!*aborting_var) {
+    if (!*aborting_var)
+    {
         uint16_t precision = 31;
         uint64_t whole = UINT_MAX;
         long double wholed = UINT_MAX;
         uint64_t half = roundl(wholed/2.0);
         uint64_t quarter = roundl(wholed/4.0);
 
-        uint16_t r_size = 256;
-
-
         uint64_t sum = 0;
-        std::vector<uint64_t> c;
-        std::vector<uint64_t> d;
-        c.push_back(0);
+        std::vector<uint64_t> lower_bound(1, 0);
+        std::vector<uint64_t> upper_bound;
+
         std::string alphabet;
 
-        uint32_t compressed_file_size = ((uint32_t)this->text[0]) | ((uint32_t)this->text[1]<<8u) | ((uint32_t)this->text[2]<<16u) | ((uint32_t)this->text[3]<<24u);
-        uint32_t uncompressed_file_size = ((uint32_t)this->text[4]) | ((uint32_t)this->text[5]<<8u) | ((uint32_t)this->text[6]<<16u) | ((uint32_t)this->text[7]<<24u);
+        uint32_t compressed_size = *(uint32_t *)(text);
+        uint32_t original_size = *(uint32_t *)(text + 4);
 
-        uint8_t r_buffer[256*4];
-        for (uint16_t i=0; i<r_size*4; ++i) r_buffer[i] = this->text[i+8];  // r array starts after 8 bytes
-        for ( uint16_t i=0; i < r_size; i++ )
+        uint16_t PMF_size = 256;
+        auto* PMF = (uint32_t *)(text + 8);
+        for ( uint16_t i=0; i < PMF_size; ++i)
         {
-            uint64_t p1 = r_buffer[i * 4];
-            uint64_t p2 = (r_buffer[i * 4 + 1] << 8u);
-            uint64_t p3 = (r_buffer[i * 4 + 2] << 16u);
-            uint64_t p4 = ((uint64_t)r_buffer[i * 4 + 3] << 24u);
-            assert(p1 < whole and p2 < whole and p3 < whole and p4 < whole);
-            uint64_t rn = p1 | p2 | p3 | p4;
-
-            if (rn != 0) {
+            if (PMF[i] != 0) {
                 alphabet += char(i);
-                sum += rn;
-                if (i != 255) c.push_back(sum);
-                d.push_back(sum);
+                sum += PMF[i];
+                if (i != 255) lower_bound.push_back(sum);
+                upper_bound.push_back(sum);
             }
         }
 
-        TextReadBitbuffer in_bit(this->text, compressed_file_size, 4+4+256*4);
+        TextReadBitbuffer in_bit(text, compressed_size, 4 + 4 + PMF_size * 4);
 
-        uint64_t a = 0;
-        uint64_t b = whole;
-        uint64_t z = 0;
-        uint64_t w = 0;
+        uint64_t low = 0;
+        uint64_t high = whole;
+        uint64_t state = 0;
+        uint64_t width;
 
-
-        // actual decoding
-
+        // loading initial state
         uint64_t i = 0;
-        while ( i<=precision and i < compressed_file_size )
+        while (i <= precision and i < compressed_size)
         {
-            if (in_bit.getbit()) z += (1ull<<(precision-i)); //if bit's value == 1
-            i++;
+            if (in_bit.getbit()) state += (1ull << (precision - i)); //if bit's value == 1
+            ++i;
         }
 
-
         std::string output;
+        output.reserve(original_size);
 
-
-        uint64_t a0 = 0;
-        uint64_t b0 = 0;
+        uint64_t new_low = 0;
+        uint64_t new_high = 0;
 
         uint64_t output_size_counter = 0;
 
-        if (*aborting_var) return;
-
+        // actual decoding
         while (!*aborting_var)
         {
-            w = b - a;
-            assert( z>=a and w<=whole );
+            width = high - low;
+            assert(state >= low and width <= whole );
 
-            uint64_t searched = floorl((long double)(z - a) * wholed / (long double)w);
-            int16_t j = std::upper_bound(d.begin(), d.end(), searched ) - d.begin();
+            // predicted_value might be slightly wrong, because of rounding errors
+            uint64_t predicted_value = floorl((long double)(state - low) * wholed / (long double)width);
+            int16_t j = std::upper_bound(upper_bound.begin(), upper_bound.end(), predicted_value) - upper_bound.begin();
 
-            b0 = a + roundl(d[j] * w / wholed); //potential rounding errors
-            if (b0 <= z) {
+            new_high = low + roundl(upper_bound[j] * width / wholed);       // potential rounding errors
+
+            // if the predicted position was indeed wrong, we'll correct that now
+            if (new_high <= state) {
                 j++;
-                b0 = a + roundl(d[j] * w / wholed); //potential rounding errors
+                new_high = low + roundl(upper_bound[j] * width / wholed);   // potential rounding errors
             }
-            a0 = a + roundl(c[j] * w / wholed);
+            new_low = low + roundl(lower_bound[j] * width / wholed);
             assert( j>=0 and j < alphabet.length() );
-            assert(((a0 <= z) and (z < b0)));
-            assert(a0 < whole and b0 <= whole);
-            assert(a <= whole);
-            assert(b <= whole);
-            assert(a < b);
-            assert(a0 < b0);
+            assert(((new_low <= state) and (state < new_high)));
+            assert(new_low < whole and new_high <= whole);
+            assert(low <= whole);
+            assert(high <= whole);
+            assert(low < high);
+            assert(new_low < new_high);
 
             output += alphabet[j];
 
             output_size_counter++;
 
-            a = a0;
-            b = b0;
-            if (output_size_counter == uncompressed_file_size) {
+            low = new_low;
+            high = new_high;
+            if (output_size_counter == original_size) {
                 break;
             }
 
-            while (b < half or a >= half)
+            while (high < half or low >= half)
             {
-                if (b < half)
+                if (high < half)
                 {
-                    a <<= 1u;
-                    b <<= 1u;
-                    z <<= 1u;
+                    low <<= 1u;
+                    high <<= 1u;
+                    state <<= 1u;
                 }
-                else if (a >= half)
+                else if (low >= half)
                 {
-                    a = (a-half)<<1u;
-                    b = (b-half)<<1u;
-                    z = (z-half)<<1u;
+                    low = (low - half) << 1u;
+                    high = (high - half) << 1u;
+                    state = (state - half) << 1u;
                 }
 
-                if (i < compressed_file_size ) {
-                    if (in_bit.getbit()) z++;
+                if (i < compressed_size ) {
+                    if (in_bit.getbit()) state++;
                     i++;
                 }
             }
-            while (a >= quarter and b < 3*quarter)
+            while (low >= quarter and high < 3 * quarter)
             {
-                a = (a-quarter)<<1u;
-                b = (b-quarter)<<1u;
-                z = (z-quarter)<<1u;
-                if (i < compressed_file_size) {
-                    if (in_bit.getbit()) z++;
+                low = (low - quarter) << 1u;
+                high = (high - quarter) << 1u;
+                state = (state - quarter) << 1u;
+                if (i < compressed_size) {
+                    if (in_bit.getbit()) state++;
                     i++;
                 }
             }
         }
 
         if (*aborting_var) return;
-        this->size = output.length();
-        delete[] this->text;
-        this->text = new uint8_t [this->size];
+        size = output.length();
+        delete[] text;
 
-        for (uint32_t j=0; j < this->size; ++j) this->text[j] = output[j];
-
+        text = new uint8_t [size];
+        for (uint32_t j=0; j < size; ++j) {
+            text[j] = output[j];
+        }
     }
 }
 
 
-void Compression::AC2_make() {
-
+void Compression::AC2_make()
+{
     //  arithmetic coding - file size version
     //  based on algorithm from youtube (Information Theory playlist by mathematicalmonk, IC 5)
 
@@ -943,125 +935,117 @@ void Compression::AC2_make() {
         uint64_t quarter = roundl(wholed / 4.0);
 
 
-        std::vector<std::vector<uint32_t>> rr = model::AC::order_1(this->text, this->size);
+        std::vector<std::vector<uint32_t>> rr = model::AC::order_1(text, size);
 
         if (*aborting_var) return;
 
         uint16_t r_size = 256;
         std::string output(4 + 4 + r_size * r_size * 4, 0);    // leaving 4 bits for compressed data size
+        output.reserve(size + output.length());
 
+        // saving original size on bits 4-7
+        *(uint32_t*)(output.c_str()+4) = size;
 
-        for (uint8_t i = 0; i < 4; i++) {
-            output[4 + i] = (uint8_t) (this->size >> (i * 8u)) & 0xFFu;
-        }
-
-        std::vector<std::vector<uint64_t>> c;
-        std::vector<std::vector<uint64_t>> d;
+        std::vector<std::vector<uint64_t>> lower_bound;
+        std::vector<std::vector<uint64_t>> upper_bound;
 
         for (uint16_t r = 0; r < r_size; r++) {
-            c.emplace_back(257);
-            d.emplace_back(257);
-            c[r][0] = 0;
+            lower_bound.emplace_back(257);
+            upper_bound.emplace_back(257);
+            lower_bound[r][0] = 0;
 
-            for (uint16_t i = 0; i < r_size; i++) { // saving probabilites to file, 256*256*4 bytes, unfortunately
+            for (uint16_t i = 0; i < r_size; i++) {
                 if (rr[r][i] != 0) {
-                    output[8 + r * 256 * 4 + 4 * i] = rr[r][i] & 0xFFu;
-                    output[8 + r * 256 * 4 + 4 * i + 1] = (rr[r][i] >> 8u) & 0xFFu;
-                    output[8 + r * 256 * 4 + 4 * i + 2] = (rr[r][i] >> 16u) & 0xFFu;
-                    output[8 + r * 256 * 4 + 4 * i + 3] = (rr[r][i] >> 24u) & 0xFFu;
+                    // saving probabilites to file, 256*256*4 bytes, unfortunately
+                    *(uint32_t*)(output.c_str()+(8 + r * 256 * 4 + 4 * i)) = rr[r][i];
                 }
-                // generating partial sums c and d
-                c[r][i + 1] = (c[r][i] + rr[r][i]);
-                d[r][i] = c[r][i + 1];
+                // generating partial sums lower_bound and upper_bound
+                lower_bound[r][i + 1] = (lower_bound[r][i] + rr[r][i]);
+                upper_bound[r][i] = lower_bound[r][i + 1];
             }
-            d[r][255] = whole;
+            upper_bound[r][255] = whole;
         }
-
 
         //check if sum of probabilities represented as UINT_MAX is equal to whole
         if (true) {
             for (auto &r : rr) {
-                uint64_t sum = 0;
-                for (auto &n : r) sum += n;
-                assert(sum == whole or sum == 0);
+                assert(std::accumulate(r.begin(), r.end(), 0ull) == whole or std::accumulate(r.begin(), r.end(), 0ull) == 0);
             }
         }
 
         //Actual encoding
-        uint64_t a = 0;
-        uint64_t b = whole;
-        uint64_t w;
-        uint32_t s = 0;
+        uint64_t low = 0;
+        uint64_t high = whole;
+        uint64_t width;
+        uint32_t state = 0;
 
         if (*aborting_var) return;
 
         TextWriteBitbuffer bitout(output);
 
-        output += text[0];  //  saving first char, for decoding purposes
+        output += (char)text[0];  //  saving first char, for decoding purposes
 
-        for (uint32_t i = 1; i < this->size and !*aborting_var; ++i) {
+        for (uint32_t i = 1; i < size and !*aborting_var; ++i) {
+            width = high - low;
+            high = low + roundl(((uint64_t)(upper_bound[text[i - 1]][text[i]] * width)) / wholed);
+            low = low + roundl(((uint64_t)(lower_bound[text[i - 1]][text[i]] * width)) / wholed);
 
-            w = b - a;
-            b = a + roundl(((uint64_t)(d[this->text[i-1]][this->text[i]]*w))/wholed);
-            a = a + roundl(((uint64_t)(c[this->text[i-1]][this->text[i]]*w))/wholed);
+            assert(low < whole and high <= whole);
+            assert(low < high);
 
-            assert(a < whole and b <= whole);
-            assert(a < b);
-            while (b < half or a >= half) {
-                if (b < half) {
+            while (high < half or low >= half) {
+                if (high < half) {
                     bitout.add_bit_0();
-                    for (uint32_t j = 0; j < s; j++) {
+                    for (uint32_t j = 0; j < state; j++) {
                         bitout.add_bit_1();
                     }
-                    s = 0;
-                    a *= 2;
-                    b *= 2;
-                } else if (a >= half) {
+                    state = 0;
+                    low *= 2;
+                    high *= 2;
+                } else if (low >= half) {
                     bitout.add_bit_1();
-                    for (uint32_t j = 0; j < s; j++) {
+                    for (uint32_t j = 0; j < state; j++) {
                         bitout.add_bit_0();
                     }
-                    s = 0;
-                    a = 2 * (a - half);
-                    b = 2 * (b - half);
+                    state = 0;
+                    low = 2 * (low - half);
+                    high = 2 * (high - half);
                 }
             }
-            while (a >= quarter and b < 3 * quarter) {
-                s++;
-                a = 2 * (a - quarter);
-                b = 2 * (b - quarter);
+            while (low >= quarter and high < 3 * quarter) {
+                state++;
+                low = 2 * (low - quarter);
+                high = 2 * (high - quarter);
             }
         }
 
-        s++;
-        if (a <= quarter) {
+        state++;
+        if (low <= quarter) {
             bitout.add_bit_0();
-            for (uint32_t j = 0; j < s; j++) {
+            for (uint32_t j = 0; j < state; j++) {
                 bitout.add_bit_1();
             }
         } else {
             bitout.add_bit_1();
-            for (uint32_t j = 0; j < s; j++) {
+            for (uint32_t j = 0; j < state; j++) {
                 bitout.add_bit_0();
             }
         }
 
         bitout.flush();
 
-
-
         if (*aborting_var) return;
 
-        for (uint8_t i = 0; i < 4; i++) { // filling first 4 bits of output with compressed data size in   B I T S
-            output[i] = (uint8_t) ((uint32_t) bitout.get_output_size() >> (i * 8u)) & 0xFFu;
+        // filling first 4 bits of output with compressed data size in   B I T S
+        *(uint32_t*)(output.c_str()) = bitout.get_output_size();
+
+        size = output.length();
+        delete[] text;
+
+        text = new uint8_t[size];
+        for (uint32_t i = 0; i < size; ++i) {
+            text[i] = output[i];
         }
-
-        this->size = output.length();
-
-        delete[] this->text;
-        this->text = new uint8_t[this->size];
-
-        for (uint32_t i = 0; i < this->size; ++i) this->text[i] = output[i];
     }
 }
 
@@ -1077,12 +1061,12 @@ void Compression::AC2_reverse()
 
         uint16_t r_size = 256;
 
-        std::vector<std::vector<uint64_t>> c(256);
-        std::vector<std::vector<uint64_t>> d(256);
+        std::vector<std::vector<uint64_t>> lower_bound(256);
+        std::vector<std::vector<uint64_t>> upper_bound(256);
         std::vector<std::string> alphabet(256);
 
-        uint32_t compressed_file_size = ((uint32_t)this->text[0]) | ((uint32_t)this->text[1]<<8u) | ((uint32_t)this->text[2]<<16u) | ((uint32_t)this->text[3]<<24u);
-        uint32_t uncompressed_file_size = ((uint32_t)this->text[4]) | ((uint32_t)this->text[5]<<8u) | ((uint32_t)this->text[6]<<16u) | ((uint32_t)this->text[7]<<24u);
+        uint32_t compressed_size = *(uint32_t *)(text);
+        uint32_t original_size = *(uint32_t *)(text + 4);
 
         for (uint16_t r = 0; r < r_size; ++r) {
             std::vector<uint64_t> temp_c(1,0);
@@ -1090,141 +1074,141 @@ void Compression::AC2_reverse()
 
             uint64_t sum = 0;
             uint8_t r_buffer[256 * 4];
-            for (uint16_t i = 0; i < r_size * 4; ++i) r_buffer[i] = this->text[8 + r*r_size*4 + i];  // r array starts after 8 bytes
+            // loading probabilities into the buffer, for easier indexing
+            for (uint16_t i = 0; i < r_size * 4; ++i) {
+                r_buffer[i] = text[8 + r*r_size*4 + i];  // r array starts after 8 bytes
+            }
+
+            // calculating cumulative mass functions from these probabilities
             for (uint16_t i = 0; i < r_size; i++) {
-                uint64_t p1 = r_buffer[i * 4];
-                uint64_t p2 = (r_buffer[i * 4 + 1] << 8u);
-                uint64_t p3 = (r_buffer[i * 4 + 2] << 16u);
-                uint64_t p4 = ((uint64_t) r_buffer[i * 4 + 3] << 24u);
-                assert(p1 < whole and p2 < whole and p3 < whole and p4 < whole);
-                uint64_t rn = p1 | p2 | p3 | p4;
+                uint64_t rn = *(uint32_t*)(r_buffer+i*4);   // rn = PMF[i]
 
                 if (rn != 0) {
                     alphabet[r] += char(i);
                     sum += rn;
                     temp_d.push_back(sum);
-                    if ( i!=255 ) {
+                    if (i!=255) {
                         temp_c.push_back(sum);
                     }
                 }
             }
             if (!temp_d.empty()) {
-                c[r] = temp_c;
-                d[r] = temp_d;
+                lower_bound[r] = temp_c;
+                upper_bound[r] = temp_d;
             }
         }
 
         if (*aborting_var) return;
 
-        TextReadBitbuffer in_bit(this->text, compressed_file_size, 8+256*256*4+1);
+        TextReadBitbuffer in_bit(text, compressed_size, 8 + 256 * 256 * 4 + 1);
 
-        uint64_t a = 0;
-        uint64_t b = whole;
-        uint64_t z = 0;
-        long double w = 0;
-
-        // actual decoding
+        uint64_t low = 0;
+        uint64_t high = whole;
+        uint64_t state = 0;
+        long double width;
 
         uint64_t i = 0;
-        while ( i<=precision and i < compressed_file_size )
+        // loading initial state
+        while ( i<=precision and i < compressed_size )
         {
-            if (in_bit.getbit()) //if bit's value == 1
+            if (in_bit.getbit()) // if bit's value == 1
             {
-                z += (1ull<<(precision-i));
+                state += (1ull << (precision - i));
             }
             i++;
         }
 
         std::string output;
 
+        uint64_t new_low;
+        uint64_t new_high;
 
-        uint64_t a0 = 0;
-        uint64_t b0 = 0;
-
-
-        uint8_t previous_char = this->text[8+r_size*r_size*4];    // first char of decoded text is normal ascii char
+        uint8_t previous_char = text[8+r_size*r_size*4];    // first char of decoded text is normal ascii char
         output += previous_char;
         uint64_t output_size_counter = 1;
 
-
-        while (output_size_counter != uncompressed_file_size and !*aborting_var)
+        // actual decoding
+        while (output_size_counter != original_size and !*aborting_var)
         {
-            assert( z <= b );
+            assert(state <= high );
+            width = high - low;
+            assert(state >= low and width <= whole );
 
-            w = b - a;
-            assert( z>=a and w<=whole );
-            uint64_t searched = floorl((long double)(z - a) * wholed / (long double)w);
+            // predicted_value might be slightly wrong, because of rounding errors
+            uint64_t predicted_value = floorl((long double)(state - low) * wholed / (long double)width);
+            int16_t j = std::upper_bound(upper_bound[previous_char].begin(), upper_bound[previous_char].end(), predicted_value ) - upper_bound[previous_char].begin();
 
-            int16_t j = std::upper_bound(d[previous_char].begin(), d[previous_char].end(), searched ) - d[previous_char].begin();
-
-            b0 = a + roundl(d[previous_char][j] * w / wholed); //potential rounding errors
-            if (b0 <= z) {
-                j++;
-                b0 = a + roundl(d[previous_char][j] * w / wholed); //potential rounding errors
+            new_high = low + roundl(upper_bound[previous_char][j] * width / wholed);
+            if (new_high <= state) {
+                // if predicted_value was indeed wrong, we'll correct that now
+                ++j;
+                new_high = low + roundl(upper_bound[previous_char][j] * width / wholed);
             }
-            a0 = a + roundl(c[previous_char][j] * w / wholed);
+            new_low = low + roundl(lower_bound[previous_char][j] * width / wholed);
 
             assert( j>=0 and j < alphabet[previous_char].length() );
-            assert( c[previous_char][j] < d[previous_char][j] );
-            assert(((a0 <= z) and (z < b0)));
-            assert(a0 <= whole and b0 <= whole);
-            assert(a <= whole);
-            assert(b <= whole);
-            assert(a < b);
-            assert(a0 < b0);
+            assert(lower_bound[previous_char][j] < upper_bound[previous_char][j] );
+            assert(((new_low <= state) and (state < new_high)));
+            assert(new_low <= whole and new_high <= whole);
+            assert(low <= whole);
+            assert(high <= whole);
+            assert(low < high);
+            assert(new_low < new_high);
 
             output += alphabet[previous_char][j];
             previous_char = alphabet[previous_char][j];
 
             output_size_counter++;
 
-            a = a0;
-            b = b0;
+            low = new_low;
+            high = new_high;
 
-            while (b < half or a >= half)
+            while (high < half or low >= half)
             {
-                if (b < half)
+                if (high < half)
                 {
-                    a *= 2;
-                    b *= 2;
-                    z *= 2;
-
+                    low *= 2;
+                    high *= 2;
+                    state *= 2;
                 }
-                else if (a >= half)
+                else if (low >= half)
                 {
-                    a = (a-half)*2;
-                    b = (b-half)*2;
-                    z = (z-half)*2;
+                    low = (low - half) * 2;
+                    high = (high - half) * 2;
+                    state = (state - half) * 2;
                 }
 
-                if (i < compressed_file_size ) {
-                    if (in_bit.getbit()) z++;
-                    i++;
+                if (i < compressed_size) {
+                    if (in_bit.getbit()) state++;
+                    ++i;
                 }
-                assert( z <= b );
+                assert(state <= high);
             }
-            while (a >= quarter and b < 3*quarter)
+            while (low >= quarter and high < 3 * quarter)
             {
-                a = (a-quarter)*2;
-                b = (b-quarter)*2;
-                z = (z-quarter)*2;
-                if (i < compressed_file_size) {
-                    if ( in_bit.getbit() ) z++;
+                low = (low - quarter) * 2;
+                high = (high - quarter) * 2;
+                state = (state - quarter) * 2;
+                if (i < compressed_size) {
+                    if (in_bit.getbit()) state++;
                     i++;
                 }
-                assert( z <= b );
+                assert(state <= high);
             }
         }
 
         if (*aborting_var) return;
 
-        this->size = output.length();
-        delete[] this->text;
-        this->text = new uint8_t [this->size];
+        size = output.length();
+        delete[] text;
 
-        for (uint32_t j=0; j < this->size; ++j) this->text[j] = output[j];
+        text = new uint8_t [size];
+        for (uint32_t j=0; j < size; ++j) {
+            text[j] = output[j];
+        }
     }
 }
+
 
 void Compression::rANS_make()
 {
@@ -1378,7 +1362,7 @@ void Compression::rANS_reverse()
     }
     const uint64_t limit = 1ull << 32;
 
-    model::ANS::normalize_frequencies(PMF, limit);
+    model::normalize_frequencies(PMF, limit);
 
     std::vector<uint64_t> CMF(used_found + 1, 0);   // CMF - Cumulative Mass Function
     for (int i=0; i < PMF.size(); ++i) CMF[i + 1] = CMF[i] + PMF[i];
@@ -1427,8 +1411,8 @@ void Compression::rANS_reverse()
 }
 
 
-void Compression::AES128_make(uint8_t key[], uint32_t key_size, uint8_t iv[], uint32_t iv_size, uint8_t metadata[], uint8_t metadata_size) {
-
+void Compression::AES128_make(uint8_t key[], uint32_t key_size, uint8_t iv[], uint32_t iv_size, uint8_t metadata[], uint8_t metadata_size)
+{
     uint64_t original_size = this->size;
     crypto::AES128::encrypt(this->text, original_size, key, key_size, iv, iv_size);
     this->size = original_size;
@@ -1452,8 +1436,6 @@ void Compression::AES128_make(uint8_t key[], uint32_t key_size, uint8_t iv[], ui
         std::swap(this->size, prepended_size);
         delete[] prepended_with_metadata;
     }
-
-
 }
 
 
@@ -1464,9 +1446,9 @@ void Compression::AES128_reverse(uint8_t key[], uint32_t key_size) {
 }
 
 
-void Compression::AES128_extract_metadata(uint8_t *&metadata, uint32_t &metadata_size) {
+void Compression::AES128_extract_metadata(uint8_t*& metadata, uint32_t& metadata_size)
+{
     assert(part_id == 0);
-
     metadata_size = proper_metadata_size;
     metadata = new uint8_t [metadata_size];
 
@@ -1481,7 +1463,8 @@ void Compression::AES128_extract_metadata(uint8_t *&metadata, uint32_t &metadata
 }
 
 
-bool Compression::AES128_verify_password_str(std::string& pw, uint8_t *metadata, uint32_t metadata_size) {
+bool Compression::AES128_verify_password_str(std::string& pw, uint8_t *metadata, uint32_t metadata_size)
+{
     assert(metadata_size == proper_metadata_size);
     const uint32_t aes128_key_size = 16;
 
@@ -1490,7 +1473,7 @@ bool Compression::AES128_verify_password_str(std::string& pw, uint8_t *metadata,
     uint8_t salt[salt_size];
 
     uint64_t loading_offset = 0;
-    for (uint64_t i=0; i < salt_size; ++i) {                            // loading salt
+    for (uint64_t i=0; i < salt_size; ++i) {    // loading salt
         salt[i] = metadata[i];
     }
     loading_offset += salt_size;
@@ -1503,11 +1486,8 @@ bool Compression::AES128_verify_password_str(std::string& pw, uint8_t *metadata,
         iterations += ((uint64_t)metadata[loading_offset + i] << (i * 8u));
     }
     loading_offset += iterations_size;
-    std::cout << "Iterations: " << iterations << std::endl;
 
-    std::cout << "Deriving key...\t" << std::flush;
     std::string pkey = crypto::PBKDF2::HMAC_SHA256(pw, salt, salt_size, iterations, aes128_key_size, *this->aborting_var);
-    std::cout << "Done" << std::endl;
 
     uint64_t encrypted_key_size = 16+16;    // 0-15 - IV, 16-31 - ciphertext
     auto* encrypted_key = new uint8_t [encrypted_key_size];
@@ -1525,7 +1505,7 @@ bool Compression::AES128_verify_password_str(std::string& pw, uint8_t *metadata,
     auto* hmac = new uint8_t [hmac_size];
 
 
-    for (uint64_t i=0; i < hmac_size; ++i) {                            // loading HMAC-SHA256
+    for (uint64_t i=0; i < hmac_size; ++i) {    // loading HMAC-SHA256
         hmac[i] = metadata[loading_offset++];
     }
 
@@ -1542,9 +1522,3 @@ bool Compression::AES128_verify_password_str(std::string& pw, uint8_t *metadata,
     delete[] encrypted_key;
     return correct_password;
 }
-
-
-
-
-
-

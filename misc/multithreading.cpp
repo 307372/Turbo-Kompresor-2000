@@ -12,9 +12,9 @@
 #include <sstream>
 #include <random>
 
-#include "../integrity_validation.h"
-#include "../compression.h"
-#include "../cryptography.h"
+#include "integrity_validation.h"
+#include "compression.h"
+#include "cryptography.h"
 
 namespace multithreading
 {

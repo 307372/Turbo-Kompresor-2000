@@ -19,7 +19,7 @@ namespace crypto {
 
     namespace PBKDF2 {
         static const uint32_t saltSize = 16;
-        enum class iteration_count { debug=1000, low=160000, medium=320000, high=720000 };
+        enum class iteration_count { low=160000, medium=320000, high=720000 };
 
         std::string HMAC_SHA256(std::string &pw, uint8_t salt[], uint32_t salt_size,
                                 uint32_t iteration_count, uint32_t dkLen, bool &aborting_var);

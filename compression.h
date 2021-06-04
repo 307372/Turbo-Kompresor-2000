@@ -31,7 +31,7 @@ public:
     void BWT_make2();   // Burrows-Wheeler transform (divsufsort)
     void BWT_reverse2();
 
-    void MTF_make();    // move-to-front
+    void MTF_make();    // move-to-front (savage)
     void MTF_reverse();
 
     void RLE_make();    // run-length encoding (interlaced)
@@ -40,7 +40,7 @@ public:
     void RLE_makeV2();  // run-length encoding (separated)
     void RLE_reverseV2();
 
-    void AC_make();     // arithmetic coding (memoryless)
+    void AC_make();     // arithmetic coding (memoryless model)
     void AC_reverse();
 
     void AC2_make();    // arithmetic coding (first-order Markov model)

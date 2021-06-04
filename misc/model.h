@@ -10,6 +10,38 @@
 #include <vector>
 
 namespace model {
+
+    void normalize_frequencies(std::vector<uint64_t>& freq, uint64_t upper_limit, uint64_t sum_of_freq=0) {
+        if (sum_of_freq == 0)
+            sum_of_freq = std::accumulate(std::begin(freq), std::end(freq), 0ull);
+
+        if (sum_of_freq == upper_limit) {
+            // making it so that sum_of_freq == upper_limit is the point of this function
+            return;
+        }
+        for (unsigned long & counter : freq) {
+            counter *= upper_limit;
+            counter /= sum_of_freq;
+        }
+
+        // probabilities must sum to 1   =>   counters must sum to upper limit
+        uint64_t rsum2 = std::accumulate(std::begin(freq), std::end(freq), 0ull);
+        if (rsum2 > upper_limit) {
+            *std::max_element(std::begin(freq), std::end(freq)) -= rsum2 - upper_limit;
+        } else if (rsum2 < upper_limit) {
+            *std::max_element(std::begin(freq), std::end(freq)) += upper_limit - rsum2;
+        }
+        assert(std::accumulate(freq.begin(), freq.end(), 0ull) == upper_limit);
+    }
+
+    std::vector<uint64_t> count_chars(uint8_t text[], uint64_t text_size) {
+        std::vector<uint64_t> counters(256, 0);
+        for (uint32_t i = 0; i < text_size; ++i) {
+            ++counters[text[i]];
+        }
+        return counters;
+    }
+
     namespace AC    // Arithmetic Coding
     {
         std::vector<std::vector<uint32_t>> order_1(uint8_t text[], uint32_t text_size) {
@@ -77,57 +109,16 @@ namespace model {
             assert(text_size != 0);
             uint64_t max = UINT32_MAX;
 
-            std::vector<uint64_t> r(256, 0);
+            std::vector<uint64_t> r = count_chars(text, text_size);
 
-            for (uint32_t i = 0; i < text_size; ++i) {
-                r[text[i]]++;
-            }
+            normalize_frequencies(r, max, text_size);
 
-            for (uint32_t i = 0; i <= UCHAR_MAX; i++) {
-                r[i] *= max;
-                r[i] /= text_size;
-            }
-
-            uint64_t rsum2 = std::accumulate(std::begin(r), std::end(r), 0ull);
-            if (rsum2 > max) {
-                *std::max_element(std::begin(r), std::end(r)) -= rsum2 - max;
-                rsum2 = max;
-            } else if (rsum2 < max) {
-                *std::max_element(std::begin(r), std::end(r)) += max - rsum2;
-                rsum2 = max;
-            }
-
-            assert(rsum2 == max);
+            assert(std::accumulate(r.begin(), r.end(), 0ull) == max);
             return r;
         }
     }
     namespace ANS   // Asymmetric Numeral Systems
     {
-        void normalize_frequencies(std::vector<uint64_t>& freq, uint64_t upper_limit, uint64_t sum_of_freq=0) {
-            if (sum_of_freq == 0)
-                sum_of_freq = std::accumulate(std::begin(freq), std::end(freq), 0ull);
-
-            if (sum_of_freq == upper_limit) {
-                // making it so that sum_of_freq == upper_limit is the point of this function
-                return;
-            }
-            for (unsigned long & counter : freq) {
-                counter *= upper_limit;
-                counter /= sum_of_freq;
-            }
-
-            // probabilities must sum to 1   =>   counters must sum to 2^32
-            uint64_t rsum2 = std::accumulate(std::begin(freq), std::end(freq), 0ull);
-            if (rsum2 > upper_limit) {
-                *std::max_element(std::begin(freq), std::end(freq)) -= rsum2 - upper_limit;
-                rsum2 = upper_limit;
-            } else if (rsum2 < upper_limit) {
-                *std::max_element(std::begin(freq), std::end(freq)) += upper_limit - rsum2;
-                rsum2 = upper_limit;
-            }
-            assert(rsum2 == upper_limit);
-        }
-
         std::vector<uint64_t> memoryless( uint8_t text[], uint32_t text_size )
         {
             assert(text_size != 0);
