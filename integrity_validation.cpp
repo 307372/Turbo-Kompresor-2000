@@ -6,8 +6,6 @@
 #include <filesystem>
 #include <bit>
 #include <cmath>
-#include <sstream>
-
 
 IntegrityValidation::IntegrityValidation()
 : SHA1_num(nullptr), SHA256_num(nullptr), CRC32_num(nullptr) {
@@ -46,8 +44,7 @@ std::string IntegrityValidation::get_SHA1_from_file(const std::string &path_to_f
 
         uint8_t buffer[64];
         uint8_t leftover_buffer[64];
-        uint32_t chunk[80];
-        for (uint32_t i=0; i < 80; ++i) chunk[i] = 0;
+        uint32_t chunk[80] = {};
 
         uint64_t byte_counter = 0;
 
@@ -67,9 +64,16 @@ std::string IntegrityValidation::get_SHA1_from_file(const std::string &path_to_f
 
                     if (64 - read_counter < 8) {
                         leftover = true;
-                        for (uint32_t i = 0; i < 64; ++i) leftover_buffer[i] = 0;
-                        for (int i = 0; i<8; ++i) leftover_buffer[56 + 7-i] = (byte_counter * 8 >> i * 8) & 0xFF;
-                    } else for (int i = 0; i<8 ; ++i) buffer[56 + 7-i] = (byte_counter * 8 >> i * 8) & 0xFF;
+
+                        for (uint32_t i = 0; i < 64; ++i) {
+                            leftover_buffer[i] = 0;
+                        }
+
+                        for (int i = 0; i<8; ++i) {
+                            leftover_buffer[56 + 7 - i] = (byte_counter * 8 >> i * 8) & 0xFF;
+                        }
+
+                    } else for (int i = 0; i<8 ; ++i) buffer[56 + 7 - i] = (byte_counter * 8 >> i * 8) & 0xFF;
                 }
             }
             else {
@@ -87,11 +91,11 @@ std::string IntegrityValidation::get_SHA1_from_file(const std::string &path_to_f
                 }
                 chunk[i] = word;
             }
+
             for (uint8_t id=16; id < 80; id++)
             {
                 chunk[id] =  std::rotl(chunk[id-3] ^ chunk[id-8] ^ chunk[id-14] ^ chunk[id-16], 1);
             }
-
 
             a = h0;
             b = h1;
@@ -134,7 +138,9 @@ std::string IntegrityValidation::get_SHA1_from_file(const std::string &path_to_f
             h2 += c;
             h3 += d;
             h4 += e;
+
         }
+
         target_file.close();
         if (aborting_var) return "";
 
@@ -638,7 +644,6 @@ std::string IntegrityValidation::get_SHA256_from_text( uint8_t text[], uint64_t 
     if (!aborting_var) {
         assert( text != nullptr and text_size != 0 );
 
-
         uint32_t h0 = 0x6A09E667;
         uint32_t h1 = 0xBB67AE85;
         uint32_t h2 = 0x3C6EF372;
@@ -670,8 +675,6 @@ std::string IntegrityValidation::get_SHA256_from_text( uint8_t text[], uint64_t 
                                         0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
 
 
-
-
         uint32_t buffer_size = 64;
         uint8_t buffer[buffer_size];
         uint8_t leftover_buffer[buffer_size];
@@ -682,11 +685,8 @@ std::string IntegrityValidation::get_SHA256_from_text( uint8_t text[], uint64_t 
 
         uint64_t byte_counter = 0;
 
-
-
         bool leftover = false;
 
-        // while ( target_file.good() or leftover )
         uint32_t blocks = ceil((double)text_size / (double)buffer_size);
 
         for (uint32_t current_block = 0; current_block < blocks; ++current_block)
@@ -700,7 +700,6 @@ std::string IntegrityValidation::get_SHA256_from_text( uint8_t text[], uint64_t 
                 }
 
                 else if ((current_block+1) * buffer_size != text_size)
-                    // if (target_file.gcount() < buffer_size)
                 {
                     for (uint32_t i=current_block * buffer_size; i < text_size; ++i)
                         buffer[i - current_block * buffer_size] = text[i];
@@ -725,8 +724,6 @@ std::string IntegrityValidation::get_SHA256_from_text( uint8_t text[], uint64_t 
                     byte_counter += read_counter;
                     blocks++;
 
-
-                    //*
                     leftover = true;
                     for (uint32_t i = 0; i < buffer_size; ++i) leftover_buffer[i] = 0;
                     leftover_buffer[0] = 0x80;
@@ -758,6 +755,7 @@ std::string IntegrityValidation::get_SHA256_from_text( uint8_t text[], uint64_t 
                 chunks[i] = chunks[i - 16] + S0 + chunks[i - 7] + S1;
             }
 
+
             a = h0;
             b = h1;
             c = h2;
@@ -786,6 +784,7 @@ std::string IntegrityValidation::get_SHA256_from_text( uint8_t text[], uint64_t 
                 b = a;
                 a = temp1 + temp2;
             }
+
             h0 += a;
             h1 += b;
             h2 += c;
@@ -796,6 +795,7 @@ std::string IntegrityValidation::get_SHA256_from_text( uint8_t text[], uint64_t 
             h7 += h;
         }
         if (aborting_var) return "";
+
 
         std::stringstream stream;
         stream << std::hex;

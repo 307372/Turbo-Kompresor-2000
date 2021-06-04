@@ -5,7 +5,6 @@
 #include <bitset>
 #include <vector>
 #include <cassert>
-#include <fstream>
 #include <thread>
 #include <sstream>
 

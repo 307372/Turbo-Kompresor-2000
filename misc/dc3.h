@@ -3,23 +3,11 @@
 
 #include <cstdint>
 #include <cmath>
+#include <iomanip>
+#include <iostream>
 
 namespace dc3
 {
-    /*
-    template <class someInt>
-    void print_array(someInt array[], uint64_t size, const std::string& message="", const std::string& sep=", ")
-    {
-        std::cout << message << '\n' << '[';
-        for (uint64_t i=0; i < size; ++i)
-        {
-            std::cout << (uint64_t)array[i];
-            if (i != size-1) std::cout << sep;
-        }
-        std::cout << ']' << std::endl;
-    }//*/
-
-
     inline uint32_t get_B1(uint32_t i) { return 3*i + 1; }
 
     inline uint32_t get_B2(uint32_t i) { return 3*i + 2; }
@@ -81,7 +69,7 @@ namespace dc3
             if (alphabet[i] != 0)
             {
                 alphabet[i] = current_letter;
-                current_letter++;
+                ++current_letter;
             }
         }
         uint32_t max_letter = current_letter;
@@ -101,8 +89,6 @@ namespace dc3
 
         delete[] text;
         delete[] alphabet;
-        // g_alphabet += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - t0).count();
-
 
         // Calculating indices of every element not divisible by 3 for sorting
         uint32_t B1_offset = count_divisible(1, translated_size-3, 3, 1);
@@ -110,8 +96,6 @@ namespace dc3
         uint32_t B0_size = count_divisible(0, translated_size-3, 3, 0);
 
         auto B12_sorted = new uint32_t[B12_size];
-
-        for (uint32_t i=0; i < B12_size; ++i) B12_sorted[i] = 0;
 
         uint32_t B1_max_index = ceil((double)B12_size/2);
         for (uint32_t i=0; i < B1_max_index; ++i)
@@ -125,8 +109,6 @@ namespace dc3
             B12_sorted[2*i+1] = 3*i+2;
         }
 
-
-
         counting_sort_indices(B12_sorted, translated, B12_size, max_letter, 2);
         counting_sort_indices(B12_sorted, translated, B12_size, max_letter, 1);
         counting_sort_indices(B12_sorted, translated, B12_size, max_letter, 0);
@@ -138,19 +120,35 @@ namespace dc3
 
         rank_array[0] = 1;
 
+        uint32_t previous1 = -1;
+        uint32_t previous2 = -1;
+        uint32_t previous3 = -1;
+
+        uint32_t next1 = -1;
+        uint32_t next2 = -1;
+        uint32_t next3 = -1;
+
         for (uint32_t i=1; i < B12_size; ++i)
         {
-            // looking for repeats within sorted text, they should obviously be next to each other
-            if (not (translated[B12_sorted[i - 1]] == translated[B12_sorted[i]] and translated[B12_sorted[i - 1] + 1] == translated[B12_sorted[i] + 1] and translated[B12_sorted[i - 1] + 2] == translated[B12_sorted[i] + 2]))
-                current_rank++;
-            else
+            // while looking for repeats within sorted text, they should obviously be next to each other
+            next1 = translated[B12_sorted[i]];
+            next2 = translated[B12_sorted[i]+1];
+            next3 = translated[B12_sorted[i]+2];
+
+            if ((previous1 == next1 and previous2 == next2 and previous3 == next3))
+            {
                 repeats = true;
+            }
+            else {
+                ++current_rank;
+                previous1 = next1;
+                previous2 = next2;
+                previous3 = next3;
+            }
             rank_array[i] = current_rank;
         }
 
         auto translation_ranked = new uint32_t[translated_size]();
-
-        for (uint32_t i=size; i < translated_size; ++i) translation_ranked[i] = 0;
 
         for (uint32_t i=0; i < B12_size; ++i) {
             translation_ranked[B12_sorted[i]] = rank_array[i];
