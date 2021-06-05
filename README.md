@@ -22,6 +22,7 @@ Szyfrowanie jest realizowane za pomocą AES-128 CTR
 - C++20 (stosowałem g++)
 - Qt6
 - libdivsufsort
+- Crypto++
 
 ## 4. Harmonogram pracy
 Zrobione:
