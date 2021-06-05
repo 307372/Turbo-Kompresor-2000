@@ -538,23 +538,27 @@ void File::prepare_for_encryption(std::string& pw, bool& aborting_var)
     uint32_t metadata_size = 88;
     auto metadata = new uint8_t [metadata_size];
 
+    // generating salt
     uint32_t salt_size = crypto::PBKDF2::saltSize;
     auto* salt = new uint8_t [salt_size];
-    std::mt19937 gen(std::random_device{}());
-    crypto::fill_with_random_data(salt, salt_size, gen);
+    std::mt19937 unsafe_gen(std::random_device{}());
+    // salt doesn't need to be cryptographically secure
+    crypto::PRNG::fill_with_random_data(salt, salt_size, unsafe_gen);
 
+    // genearting key from password
     uint32_t key_size = crypto::AES128::key_size;
     auto iteration_count = static_cast<uint64_t>(crypto::PBKDF2::iteration_count::high);
-
     std::string pw_key = crypto::PBKDF2::HMAC_SHA256(pw, salt, salt_size,
                                                      iteration_count, key_size, aborting_var);
 
+    // generating random key
     uint32_t random_key_size = key_size;
     auto* random_key = new uint8_t [random_key_size];
-    crypto::fill_with_random_data(random_key, random_key_size, gen);
+    CryptoPP::AutoSeededX917RNG<CryptoPP::AES> crypto_gen;
+    crypto::CSPRNG::fill_with_random_data(random_key, random_key_size, crypto_gen);
 
     crypto::AES128::generate_metadata((uint8_t*) pw_key.c_str(), pw_key.length(), salt, salt_size, iteration_count,
-                                      random_key, random_key_size, metadata, metadata_size, gen, aborting_var);
+                                      random_key, random_key_size, metadata, metadata_size, unsafe_gen, aborting_var);
 
     key = std::basic_string<uint8_t>(random_key, random_key_size);
     encryption_metadata = std::basic_string<uint8_t>(metadata, metadata_size);

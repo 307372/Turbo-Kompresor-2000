@@ -28,7 +28,6 @@ namespace multithreading
             if (bin_flags[0] and !aborting_var) {
                 comp->BWT_make();
                 if (progress_ptr != nullptr) (*progress_ptr)++;
-
             }
 
             if (bin_flags[1] and !aborting_var) {
@@ -59,10 +58,12 @@ namespace multithreading
             if (bin_flags[6] and !aborting_var) {   // AES-128
                 assert(key != nullptr);
 
-                std::mt19937 gen(std::random_device{}());
+                // generating IV
+                std::mt19937 unsafe_gen(std::random_device{}());
                 uint32_t iv_size = 16;
                 auto* iv = new uint8_t [iv_size];
-                crypto::fill_with_random_data(iv, iv_size, gen);
+                // initialisation vector doesn't need to be cryptographically secure
+                crypto::PRNG::fill_with_random_data(iv, iv_size, unsafe_gen);
 
                 uint32_t key_size = 16;
                 if (comp->part_id == 0) {   // block 0 needs to be prepended with metadata

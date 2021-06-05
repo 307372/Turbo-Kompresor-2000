@@ -222,22 +222,20 @@ namespace crypto {
             // generating IV for encrypting the random key
             uint32_t iv_size = AES128_key_size;
             auto* iv_random_key = new uint8_t [iv_size];
-            crypto::fill_with_random_data(iv_random_key, iv_size, gen);
-            // print_arr_8(iv_random_key, iv_size, "IV random key:");
+            crypto::PRNG::fill_with_random_data(iv_random_key, iv_size, gen);   // IV does not need to be secure
+                                                                                // it's supposed to be stored in plaintext anyway
 
             uint64_t encrypted_random_key_size = random_key_size;                   // will be overwritten during encryption
             auto* encrypted_random_key = new uint8_t [encrypted_random_key_size];
             for (uint32_t i=0; i < encrypted_random_key_size; ++i) {
                 encrypted_random_key[i] = random_key[i];
             }
-            // print_arr_8(encrypted_random_key, encrypted_random_key_size, "Random key:");
 
 
             // replaces encrypted_random_key with concatenation of iv and encrypted random key
             crypto::AES128::encrypt(encrypted_random_key, encrypted_random_key_size,
                                     pwkey, pwkey_size, iv_random_key, iv_size);
 
-            // print_arr_8(encrypted_random_key, encrypted_random_key_size, "Encrypted random key:");
             delete[] iv_random_key;
 
             for (uint32_t i=0; i < encrypted_random_key_size; ++i) {                    // copying the IV and encrypted random key
@@ -265,7 +263,6 @@ namespace crypto {
             const uint32_t aes128_key_size = crypto::AES128::key_size;
 
             // we'll need to parse metadata to verify the password
-
             uint64_t loading_offset = crypto::PBKDF2::saltSize + sizeof(uint64_t);
 
             uint64_t encrypted_key_size = 16+16;    // 0-15 - IV, 16-31 - ciphertext
@@ -462,16 +459,32 @@ namespace crypto {
         }
     }
 
-    void fill_with_random_data(uint8_t arr[], int64_t arr_size, std::mt19937& gen, int64_t start, int64_t stop)
+    namespace CSPRNG
     {
-        if (arr_size < 0)
-            return;
+        void fill_with_random_data(uint8_t arr[], int64_t arr_size, CryptoPP::AutoSeededX917RNG<CryptoPP::AES>& gen, int64_t start, int64_t stop)
+        {
+            if (stop < 0 or stop >= arr_size)
+                stop = arr_size-1;
 
-        if (stop < 0)
-            stop = arr_size-1;
+            if (arr_size < 0 or start > stop)
+                return;
 
-        for (int64_t i=start; i <= stop; ++i)
-            arr[i] = gen() & 0xFF;
+            gen.GenerateBlock(arr + start, stop-start+1);
+        }
+    }
+    namespace PRNG
+    {
+        void fill_with_random_data(uint8_t arr[], int64_t arr_size, std::mt19937& gen, int64_t start, int64_t stop)
+        {
+            if (stop < 0 or stop >= arr_size)
+                stop = arr_size-1;
+
+            if (arr_size < 0 or start > stop)
+                return;
+
+            for (int64_t i=start; i <= stop; ++i)
+                arr[i] = gen() & 0xFF;
+        }
     }
 }
 

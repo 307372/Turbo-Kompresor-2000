@@ -4,11 +4,11 @@
 
 #include <string>
 #include <random>
+#include <crypto++/osrng.h>
+#include <cryptopp/rijndael.h>
 
 
 namespace crypto {
-
-    void fill_with_random_data(uint8_t arr[], int64_t arr_size, std::mt19937& gen, int64_t start=0, int64_t stop=-1);
 
     namespace HMAC {
 
@@ -26,7 +26,6 @@ namespace crypto {
     }
 
 
-
     namespace AES128 // CTR mode
     {
         const uint32_t key_size = 16;
@@ -42,6 +41,16 @@ namespace crypto {
                      uint8_t iv_arr[], uint32_t iv_size);
 
         void decrypt(uint8_t*& ciphertext, uint64_t& ciphertext_size, uint8_t key[], uint32_t key_size );
+    }
+
+    namespace CSPRNG
+    {
+        void fill_with_random_data(uint8_t arr[], int64_t arr_size, CryptoPP::AutoSeededX917RNG<CryptoPP::AES>& gen, int64_t start=0, int64_t stop=-1);
+    }
+
+    namespace PRNG
+    {
+        void fill_with_random_data(uint8_t arr[], int64_t arr_size, std::mt19937& gen, int64_t start=0, int64_t stop=-1);
     }
 }
 
