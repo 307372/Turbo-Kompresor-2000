@@ -1,7 +1,9 @@
 #include "archive_structures.h"
 
+#include <QApplication>
 #include <iostream>
 #include <bitset>
+
 
 #include "misc/multithreading.h"
 #include "cryptography.h"
@@ -535,6 +537,9 @@ bool File::is_encrypted() const {return encrypted;}
 void File::prepare_for_encryption(std::string& pw, bool& aborting_var)
 // prepares metadata and random key for the purpose of encrypting the file
 {
+    // changing coursor & trying to unlock the file
+    reinterpret_cast<QGuiApplication*>(QApplication::instance())->setOverrideCursor(Qt::WaitCursor);
+
     uint32_t metadata_size = 88;
     auto metadata = new uint8_t [metadata_size];
 
@@ -571,15 +576,20 @@ void File::prepare_for_encryption(std::string& pw, bool& aborting_var)
     delete[] random_key;
     delete[] salt;
     delete[] metadata;
+
+    // restoring original coursor
+    reinterpret_cast<QGuiApplication*>(QApplication::instance())->restoreOverrideCursor();
 }
 
 
 bool File::unlock(std::string& pw, std::fstream& archive_stream, bool& aborting_var)
 // Checks whether or not the provided password is correct, and if it is, saves PBKDF2(pw) for future use
 {
-    // if (!locked) return true;
     assert(locked);
     assert(archive_stream.is_open());
+
+    // changing coursor & trying to unlock the file
+    reinterpret_cast<QGuiApplication*>(QApplication::instance())->setOverrideCursor(Qt::WaitCursor);
 
     std::streamoff original_pos = archive_stream.tellg();
     archive_stream.seekg(data_location+4+4); // we'll need to skip multithreading metadata, that's why there's +4+4
@@ -597,6 +607,9 @@ bool File::unlock(std::string& pw, std::fstream& archive_stream, bool& aborting_
     bool is_pw_correct = crypto::AES128::verify_password_key((uint8_t*)pwkey.c_str(), pwkey.length(), metadata,
                                                              metadata_size, aborting_var);
 
+    // restoring original coursor
+    reinterpret_cast<QGuiApplication*>(QApplication::instance())->restoreOverrideCursor();
+
     if (is_pw_correct) {
         this->key = std::basic_string<uint8_t>((uint8_t*)pwkey.c_str(), pwkey.length());
         this->encryption_metadata = std::basic_string<uint8_t>(metadata, metadata_size);
@@ -610,6 +623,7 @@ bool File::unlock(std::string& pw, std::fstream& archive_stream, bool& aborting_
         delete[] metadata;
         return false;
     }
+
 }
 
 
