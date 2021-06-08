@@ -18,9 +18,11 @@ namespace dc3
     }
 
 
-    void counting_sort_indices(uint32_t*& indices, uint32_t tab[], uint32_t indicesSize, uint32_t maxTabVal, uint32_t offset)
+    void counting_sort_indices(uint32_t*& indices, uint32_t tab[], uint32_t indicesSize, uint32_t maxTabVal, uint32_t offset, bool& aborting_var)
     // Counting sort, which sorts indices[] by elements these indices point to in tab[]
     {
+        if (aborting_var) return;
+
         uint32_t counters_size = maxTabVal + 1;
         auto counters = new uint32_t[counters_size]();
         auto sorted_indices = new uint32_t [indicesSize];
@@ -30,14 +32,32 @@ namespace dc3
             ++counters[tab[indices[i] + offset]];
         }
 
+        if (aborting_var) {
+            delete[] counters;
+            delete[] sorted_indices;
+            return;
+        }
+
         // then we modify counters, so that output[counters[x]] is the place last occurrence of letter x should be:
         for (uint32_t i=1; i < counters_size; ++i)
             counters[i] += counters[i-1];
+
+        if (aborting_var) {
+            delete[] counters;
+            delete[] sorted_indices;
+            return;
+        }
 
         // then we iterate over the indices array, and using counters the modified counters array,
         // we place the elements in sorted order:
         for (int64_t i = indicesSize - 1; i >= 0; --i) {
             sorted_indices[(counters[tab[indices[i]+offset]] -= 1)] = indices[i];
+        }
+
+        if (aborting_var) {
+            delete[] counters;
+            delete[] sorted_indices;
+            return;
         }
 
         std::swap(sorted_indices, indices);
@@ -46,9 +66,17 @@ namespace dc3
     }
 
 
-    void DC3_recursion( uint32_t text[], uint32_t*& SA, uint64_t size, uint32_t max_val=256 )
+    void DC3_recursion( uint32_t*& text, uint32_t*& SA, uint64_t size, bool& aborting_var, uint32_t max_val=256 )
     {
-        // auto t0 = std::chrono::high_resolution_clock::now();
+        if (aborting_var) {
+            delete[] SA;
+            SA = nullptr;
+
+            delete[] SA;
+            SA = nullptr;
+
+            return;
+        }
 
         uint32_t alphabet_size = max_val+1;
         auto alphabet = new uint32_t[alphabet_size]();
@@ -75,6 +103,19 @@ namespace dc3
         uint32_t max_letter = current_letter;
         uint32_t translated_size = size;
 
+        if (aborting_var) {
+            delete[] SA;
+            SA = nullptr;
+
+            delete[] alphabet;
+            alphabet = nullptr;
+
+            delete[] SA;
+            SA = nullptr;
+
+            return;
+        }
+
         // padding translated with zeros, so that there are at least three of them at the end
 
         if ( text[size-1] != 0) translated_size += 3;
@@ -88,7 +129,9 @@ namespace dc3
         for (uint32_t i=0; i < size; ++i) translated[i] = alphabet[text[i]];
 
         delete[] text;
+        text = nullptr;
         delete[] alphabet;
+        alphabet = nullptr;
 
         // Calculating indices of every element not divisible by 3 for sorting
         uint32_t B1_offset = count_divisible(1, translated_size-3, 3, 1);
@@ -109,9 +152,28 @@ namespace dc3
             B12_sorted[2*i+1] = 3*i+2;
         }
 
-        counting_sort_indices(B12_sorted, translated, B12_size, max_letter, 2);
-        counting_sort_indices(B12_sorted, translated, B12_size, max_letter, 1);
-        counting_sort_indices(B12_sorted, translated, B12_size, max_letter, 0);
+        counting_sort_indices(B12_sorted, translated, B12_size, max_letter, 2, aborting_var);
+        counting_sort_indices(B12_sorted, translated, B12_size, max_letter, 1, aborting_var);
+        counting_sort_indices(B12_sorted, translated, B12_size, max_letter, 0, aborting_var);
+
+        if (aborting_var) {
+            delete[] SA;
+            SA = nullptr;
+
+            delete[] alphabet;
+            alphabet = nullptr;
+
+            delete[] translated;
+            translated = nullptr;
+
+            delete[] B12_sorted;
+            B12_sorted = nullptr;
+
+            delete[] SA;
+            SA = nullptr;
+
+            return;
+        }
 
         auto rank_array = new uint32_t [B12_size]();
         bool repeats = false;
@@ -148,16 +210,40 @@ namespace dc3
             rank_array[i] = current_rank;
         }
 
+        if (aborting_var) {
+            delete[] SA;
+            SA = nullptr;
+
+            delete[] alphabet;
+            alphabet = nullptr;
+
+            delete[] translated;
+            translated = nullptr;
+
+            delete[] B12_sorted;
+            B12_sorted = nullptr;
+
+            delete[] rank_array;
+            rank_array = nullptr;
+
+            delete[] SA;
+            SA = nullptr;
+
+            return;
+        }
+
         auto translation_ranked = new uint32_t[translated_size]();
 
         for (uint32_t i=0; i < B12_size; ++i) {
             translation_ranked[B12_sorted[i]] = rank_array[i];
         }
         delete[] rank_array;
+        rank_array = nullptr;
 
         if (repeats)    // 2 indices cannot have the same rank, so we need to address this issue
         {
             delete[] B12_sorted;    // B12_sorted will be overwriten later anyway
+            B12_sorted = nullptr;
 
             uint32_t renamed_size = B12_size+1;
             auto renamed_with_ranks = new uint32_t [renamed_size]();
@@ -174,10 +260,68 @@ namespace dc3
 
             uint32_t sorted_ranks_size = renamed_size;
             uint32_t* sorted_ranks = nullptr;
+
             delete[] translation_ranked;
+            translation_ranked = nullptr;
 
+            if (aborting_var) {
+                delete[] SA;
+                SA = nullptr;
 
-            DC3_recursion(renamed_with_ranks, sorted_ranks, sorted_ranks_size, current_rank);
+                delete[] alphabet;
+                alphabet = nullptr;
+
+                delete[] translated;
+                translated = nullptr;
+
+                delete[] B12_sorted;
+                B12_sorted = nullptr;
+
+                delete[] rank_array;
+                rank_array = nullptr;
+
+                delete[] translation_ranked;
+                translation_ranked = nullptr;
+
+                delete[] renamed_with_ranks;
+                renamed_with_ranks = nullptr;
+
+                delete[] SA;
+                SA = nullptr;
+
+                return;
+            }
+
+            DC3_recursion(renamed_with_ranks, sorted_ranks, sorted_ranks_size, aborting_var, current_rank);
+
+            if (aborting_var) {
+                delete[] SA;
+                SA = nullptr;
+
+                delete[] alphabet;
+                alphabet = nullptr;
+
+                delete[] translated;
+                translated = nullptr;
+
+                delete[] B12_sorted;
+                B12_sorted = nullptr;
+
+                delete[] rank_array;
+                rank_array = nullptr;
+
+                delete[] translation_ranked;
+                translation_ranked = nullptr;
+
+                delete[] renamed_with_ranks;
+                renamed_with_ranks = nullptr;
+
+                delete[] SA;
+                SA = nullptr;
+
+                return;
+            }
+
 
             B12_sorted = new uint32_t [B12_size];
 
@@ -190,11 +334,67 @@ namespace dc3
             }
 
             delete[] sorted_ranks;
+            sorted_ranks = nullptr;
+
             translation_ranked = new uint32_t [translated_size]();
 
             for (uint32_t i=0; i < B12_size; ++i) {
                 translation_ranked[B12_sorted[i]] = i+1;
             }
+
+            if (aborting_var) {
+                delete[] SA;
+                SA = nullptr;
+
+                delete[] alphabet;
+                alphabet = nullptr;
+
+                delete[] translated;
+                translated = nullptr;
+
+                delete[] B12_sorted;
+                B12_sorted = nullptr;
+
+                delete[] rank_array;
+                rank_array = nullptr;
+
+                delete[] translation_ranked;
+                translation_ranked = nullptr;
+
+                delete[] renamed_with_ranks;
+                renamed_with_ranks = nullptr;
+
+                delete[] SA;
+                SA = nullptr;
+
+                return;
+            }
+
+        }
+
+        if (aborting_var) {
+            delete[] SA;
+            SA = nullptr;
+
+            delete[] alphabet;
+            alphabet = nullptr;
+
+            delete[] translated;
+            translated = nullptr;
+
+            delete[] B12_sorted;
+            B12_sorted = nullptr;
+
+            delete[] rank_array;
+            rank_array = nullptr;
+
+            delete[] translation_ranked;
+            translation_ranked = nullptr;
+
+            delete[] SA;
+            SA = nullptr;
+
+            return;
         }
 
         // B0 - array of indices where every index % 3 == 0
@@ -203,9 +403,37 @@ namespace dc3
         for (uint32_t i=0; i < B0_size; ++i) B0_sorted[i] = i*3;
 
         // sort by rank of next suffix (which is always in B12, and we've sorted these already)
-        counting_sort_indices(B0_sorted, translation_ranked, B0_size, size, 1);
+        counting_sort_indices(B0_sorted, translation_ranked, B0_size, size, 1, aborting_var);
         // sort by current letter
-        counting_sort_indices(B0_sorted, translated, B0_size, max_letter, 0);
+        counting_sort_indices(B0_sorted, translated, B0_size, max_letter, 0, aborting_var);
+
+        if (aborting_var) {
+            delete[] SA;
+            SA = nullptr;
+
+            delete[] alphabet;
+            alphabet = nullptr;
+
+            delete[] translated;
+            translated = nullptr;
+
+            delete[] B12_sorted;
+            B12_sorted = nullptr;
+
+            delete[] rank_array;
+            rank_array = nullptr;
+
+            delete[] translation_ranked;
+            translation_ranked = nullptr;
+
+            delete[] B0_sorted;
+            B0_sorted = nullptr;
+
+            delete[] SA;
+            SA = nullptr;
+
+            return;
+        }
 
         // Both B0 and B12 are sorted now. Time to merge them into SA.
         // b0_i and b12_i will be our iterators for this process
@@ -235,6 +463,33 @@ namespace dc3
                 }
                 else {
                     SA[i] = B12_sorted[b12_i++];
+                    if (aborting_var) {
+                        delete[] SA;
+                        SA = nullptr;
+
+                        delete[] alphabet;
+                        alphabet = nullptr;
+
+                        delete[] translated;
+                        translated = nullptr;
+
+                        delete[] B12_sorted;
+                        B12_sorted = nullptr;
+
+                        delete[] rank_array;
+                        rank_array = nullptr;
+
+                        delete[] translation_ranked;
+                        translation_ranked = nullptr;
+
+                        delete[] B0_sorted;
+                        B0_sorted = nullptr;
+
+                        delete[] SA;
+                        SA = nullptr;
+
+                        return;
+                    }
                 }
             }
             else {
@@ -259,8 +514,63 @@ namespace dc3
                     SA[i] = B0_sorted[b0_i++];
                 } else {
                     SA[i] = B12_sorted[b12_i++];
+                    if (aborting_var) {
+                        delete[] SA;
+                        SA = nullptr;
+
+                        delete[] alphabet;
+                        alphabet = nullptr;
+
+                        delete[] translated;
+                        translated = nullptr;
+
+                        delete[] B12_sorted;
+                        B12_sorted = nullptr;
+
+                        delete[] rank_array;
+                        rank_array = nullptr;
+
+                        delete[] translation_ranked;
+                        translation_ranked = nullptr;
+
+                        delete[] B0_sorted;
+                        B0_sorted = nullptr;
+
+                        delete[] SA;
+                        SA = nullptr;
+
+                        return;
+                    }
                 }
             }
+        }
+
+        if (aborting_var) {
+            delete[] SA;
+            SA = nullptr;
+
+            delete[] alphabet;
+            alphabet = nullptr;
+
+            delete[] translated;
+            translated = nullptr;
+
+            delete[] B12_sorted;
+            B12_sorted = nullptr;
+
+            delete[] rank_array;
+            rank_array = nullptr;
+
+            delete[] translation_ranked;
+            translation_ranked = nullptr;
+
+            delete[] B0_sorted;
+            B0_sorted = nullptr;
+
+            delete[] SA;
+            SA = nullptr;
+
+            return;
         }
 
         // appending the rest
@@ -276,14 +586,18 @@ namespace dc3
         }
 
         delete[] translation_ranked;
+        translation_ranked = nullptr;
         delete[] translated;
+        translated = nullptr;
         delete[] B12_sorted;
+        B12_sorted = nullptr;
         delete[] B0_sorted;
+        B0_sorted = nullptr;
     }
 
 
     template<typename someInt>
-    void DC3( someInt text[], uint32_t*& SA, uint64_t size, uint32_t max_val=0xFF )
+    void DC3( someInt text[], uint32_t*& SA, uint64_t size, bool& aborting_var, uint32_t max_val=0xFF )
     // General DC3 interface
     {
         // checks whether it makes any sense to even start this algorithm up
@@ -314,8 +628,17 @@ namespace dc3
 
 
                 // starting actual DC3
-                DC3_recursion(proper_text, SA, size, max_val+1);
+                DC3_recursion(proper_text, SA, size, aborting_var, max_val+1);
 
+                if (aborting_var) {
+                    delete[] proper_text;
+                    proper_text = nullptr;
+
+                    delete[] SA;
+                    SA = nullptr;
+
+                    return;
+                }
 
                 // DC3 gives us suffix array with additional index for EOF we add during the algorithm, so let's filter it off
                 auto SA2 = new uint32_t [size]();
@@ -337,7 +660,7 @@ namespace dc3
 
 
     template<typename someInt>
-    void BWT_DC3( someInt text[], uint32_t*& SA, uint64_t size, uint32_t max_val=0xFF )
+    void BWT_DC3( someInt text[], uint32_t*& SA, uint64_t size, bool& aborting_var, uint32_t max_val=0xFF )
     // Interface specific to my implementation of BWT
     {
         // checks whether it makes any sense to even start this algorithm up
@@ -366,7 +689,17 @@ namespace dc3
 
 
                 // starting actual DC3
-                DC3_recursion(proper_text, SA, new_size, max_val+2);
+                DC3_recursion(proper_text, SA, new_size, aborting_var, max_val+2);
+
+                if (aborting_var) {
+                    delete[] proper_text;
+                    proper_text = nullptr;
+
+                    delete[] SA;
+                    SA = nullptr;
+
+                    return;
+                }
 
                 // DC3 gives us suffix array with additional index for EOF we add during the algorithm, so let's filter it off
                 auto SA2 = new uint32_t [size+1]();

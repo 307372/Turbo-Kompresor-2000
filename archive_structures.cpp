@@ -35,7 +35,7 @@ bool File::process_the_file(std::fstream &archive_stream, const std::string& pat
                 copied_key[i] = (uint8_t)key[i];
             }
 
-            successful = multithreading::processing_foreman(archive_stream, this->path, Compression::compress,
+            successful = multithreading::processing_foreman(archive_stream, this->path, multithreading::mode::compress,
                                                             flags_value, original_size, &this->compressed_size,
                                                             aborting_var, validate_integrity, progress_ptr,
                                                             &copied_key, // randomly generated key
@@ -44,7 +44,7 @@ bool File::process_the_file(std::fstream &archive_stream, const std::string& pat
             delete[] copied_key;
         }
         else {
-                successful = multithreading::processing_foreman(archive_stream, this->path, Compression::compress,
+                successful = multithreading::processing_foreman(archive_stream, this->path, multithreading::mode::compress,
                                                                 flags_value, original_size, &this->compressed_size,
                                                                 aborting_var, validate_integrity, progress_ptr );
         }
@@ -66,7 +66,7 @@ bool File::process_the_file(std::fstream &archive_stream, const std::string& pat
             }
 
             successful = multithreading::processing_foreman(archive_stream, path_to_destination + '/' + this->name,
-                                                            Compression::decompress, flags_value,
+                                                            multithreading::mode::decompress, flags_value,
                                                             original_size, &this->compressed_size, aborting_var,
                                                             validate_integrity, progress_ptr,
                                                             &pw_key, // PBKDF2(password)
@@ -77,7 +77,7 @@ bool File::process_the_file(std::fstream &archive_stream, const std::string& pat
         }
         else {
             successful = multithreading::processing_foreman(archive_stream, path_to_destination + '/' + this->name,
-                                                            Compression::decompress, flags_value,
+                                                            multithreading::mode::decompress, flags_value,
                                                             original_size, &this->compressed_size, aborting_var,
                                                             validate_integrity, progress_ptr);
         }
@@ -484,7 +484,7 @@ void File::copy_to_another_archive( std::fstream& src, std::fstream& dst, uint64
         dst.write((char*)buffer, buffer_size);
         delete[] buffer;
 
-        assert( dst.tellp(); == dst_location - this->location + this->data_location );
+        assert( dst.tellp() == dst_location - this->location + this->data_location );
 
         assert(this->data_location != 0);
         src.seekg(this->data_location);
@@ -547,7 +547,7 @@ void File::prepare_for_encryption(std::string& pw, bool& aborting_var)
 
     // genearting key from password
     uint32_t key_size = crypto::AES128::key_size;
-    auto iteration_count = static_cast<uint64_t>(crypto::PBKDF2::iteration_count::high);
+    auto iteration_count = static_cast<uint64_t>(crypto::PBKDF2::iteration_count::low);
     std::string pw_key = crypto::PBKDF2::HMAC_SHA256(pw, salt, salt_size,
                                                      iteration_count, key_size, aborting_var);
 

@@ -29,6 +29,7 @@ namespace crypto {
     namespace AES128 // CTR mode
     {
         const uint32_t key_size = 16;
+        const uint32_t metadata_size = 88;
 
         void generate_metadata(uint8_t pwkey[], uint64_t pwkey_size, uint8_t salt[], uint32_t salt_size,
                                uint64_t PBKDF2_iterations, uint8_t random_key[], uint32_t random_key_size,

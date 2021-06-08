@@ -5,14 +5,7 @@
 #include <random>
 
 class Compression {
-private:
-    static const uint32_t proper_metadata_size = 88;   // size of metadata should be 88 bytes
-
 public:
-    enum
-    {
-        compress, decompress
-    };
     bool* aborting_var;
     uint8_t* text;
     uint32_t size;
