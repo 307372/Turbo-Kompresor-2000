@@ -33,8 +33,4 @@ Zrobione:
 - 13.05.2021 - Modyfikacje pozwalające na zaszyfrowanie i odszyfrowanie pliku z poziomu GUI
 - 27.05.2021 - Implementacja ranged Asymmetric Numeral Systems (rANS)
 - 10.06.2021 - Optymalizacja dodanych algorytmów
-
-Do zrobienia:
-
-Opcjonalne dodatki do implementacji po zakończeniu głównych założeń projektu:
 - 17.06.2021 - Ponowna refaktoryzacja, ogólne poprawienie jakości i czytelności nowego kodu
