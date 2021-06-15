@@ -1,7 +1,9 @@
 #include "archive_structures.h"
 
+#include <QApplication>
 #include <iostream>
 #include <bitset>
+
 
 #include "misc/multithreading.h"
 #include "cryptography.h"
@@ -35,7 +37,7 @@ bool File::process_the_file(std::fstream &archive_stream, const std::string& pat
                 copied_key[i] = (uint8_t)key[i];
             }
 
-            successful = multithreading::processing_foreman(archive_stream, this->path, Compression::compress,
+            successful = multithreading::processing_foreman(archive_stream, this->path, multithreading::mode::compress,
                                                             flags_value, original_size, &this->compressed_size,
                                                             aborting_var, validate_integrity, progress_ptr,
                                                             &copied_key, // randomly generated key
@@ -44,7 +46,7 @@ bool File::process_the_file(std::fstream &archive_stream, const std::string& pat
             delete[] copied_key;
         }
         else {
-                successful = multithreading::processing_foreman(archive_stream, this->path, Compression::compress,
+                successful = multithreading::processing_foreman(archive_stream, this->path, multithreading::mode::compress,
                                                                 flags_value, original_size, &this->compressed_size,
                                                                 aborting_var, validate_integrity, progress_ptr );
         }
@@ -66,7 +68,7 @@ bool File::process_the_file(std::fstream &archive_stream, const std::string& pat
             }
 
             successful = multithreading::processing_foreman(archive_stream, path_to_destination + '/' + this->name,
-                                                            Compression::decompress, flags_value,
+                                                            multithreading::mode::decompress, flags_value,
                                                             original_size, &this->compressed_size, aborting_var,
                                                             validate_integrity, progress_ptr,
                                                             &pw_key, // PBKDF2(password)
@@ -77,7 +79,7 @@ bool File::process_the_file(std::fstream &archive_stream, const std::string& pat
         }
         else {
             successful = multithreading::processing_foreman(archive_stream, path_to_destination + '/' + this->name,
-                                                            Compression::decompress, flags_value,
+                                                            multithreading::mode::decompress, flags_value,
                                                             original_size, &this->compressed_size, aborting_var,
                                                             validate_integrity, progress_ptr);
         }
@@ -484,7 +486,7 @@ void File::copy_to_another_archive( std::fstream& src, std::fstream& dst, uint64
         dst.write((char*)buffer, buffer_size);
         delete[] buffer;
 
-        assert( dst.tellp(); == dst_location - this->location + this->data_location );
+        assert( dst.tellp() == dst_location - this->location + this->data_location );
 
         assert(this->data_location != 0);
         src.seekg(this->data_location);
@@ -535,26 +537,33 @@ bool File::is_encrypted() const {return encrypted;}
 void File::prepare_for_encryption(std::string& pw, bool& aborting_var)
 // prepares metadata and random key for the purpose of encrypting the file
 {
+    // changing coursor & trying to unlock the file
+    reinterpret_cast<QGuiApplication*>(QApplication::instance())->setOverrideCursor(Qt::WaitCursor);
+
     uint32_t metadata_size = 88;
     auto metadata = new uint8_t [metadata_size];
 
+    // generating salt
     uint32_t salt_size = crypto::PBKDF2::saltSize;
     auto* salt = new uint8_t [salt_size];
-    std::mt19937 gen(std::random_device{}());
-    crypto::fill_with_random_data(salt, salt_size, gen);
+    std::mt19937 unsafe_gen(std::random_device{}());
+    // salt doesn't need to be cryptographically secure
+    crypto::PRNG::fill_with_random_data(salt, salt_size, unsafe_gen);
 
+    // genearting key from password
     uint32_t key_size = crypto::AES128::key_size;
-    auto iteration_count = static_cast<uint64_t>(crypto::PBKDF2::iteration_count::high);
-
+    auto iteration_count = static_cast<uint64_t>(crypto::PBKDF2::iteration_count::low);
     std::string pw_key = crypto::PBKDF2::HMAC_SHA256(pw, salt, salt_size,
                                                      iteration_count, key_size, aborting_var);
 
+    // generating random key
     uint32_t random_key_size = key_size;
     auto* random_key = new uint8_t [random_key_size];
-    crypto::fill_with_random_data(random_key, random_key_size, gen);
+    CryptoPP::AutoSeededX917RNG<CryptoPP::AES> crypto_gen;
+    crypto::CSPRNG::fill_with_random_data(random_key, random_key_size, crypto_gen);
 
     crypto::AES128::generate_metadata((uint8_t*) pw_key.c_str(), pw_key.length(), salt, salt_size, iteration_count,
-                                      random_key, random_key_size, metadata, metadata_size, gen, aborting_var);
+                                      random_key, random_key_size, metadata, metadata_size, unsafe_gen, aborting_var);
 
     key = std::basic_string<uint8_t>(random_key, random_key_size);
     encryption_metadata = std::basic_string<uint8_t>(metadata, metadata_size);
@@ -567,15 +576,20 @@ void File::prepare_for_encryption(std::string& pw, bool& aborting_var)
     delete[] random_key;
     delete[] salt;
     delete[] metadata;
+
+    // restoring original coursor
+    reinterpret_cast<QGuiApplication*>(QApplication::instance())->restoreOverrideCursor();
 }
 
 
 bool File::unlock(std::string& pw, std::fstream& archive_stream, bool& aborting_var)
 // Checks whether or not the provided password is correct, and if it is, saves PBKDF2(pw) for future use
 {
-    // if (!locked) return true;
     assert(locked);
     assert(archive_stream.is_open());
+
+    // changing coursor & trying to unlock the file
+    reinterpret_cast<QGuiApplication*>(QApplication::instance())->setOverrideCursor(Qt::WaitCursor);
 
     std::streamoff original_pos = archive_stream.tellg();
     archive_stream.seekg(data_location+4+4); // we'll need to skip multithreading metadata, that's why there's +4+4
@@ -593,6 +607,9 @@ bool File::unlock(std::string& pw, std::fstream& archive_stream, bool& aborting_
     bool is_pw_correct = crypto::AES128::verify_password_key((uint8_t*)pwkey.c_str(), pwkey.length(), metadata,
                                                              metadata_size, aborting_var);
 
+    // restoring original coursor
+    reinterpret_cast<QGuiApplication*>(QApplication::instance())->restoreOverrideCursor();
+
     if (is_pw_correct) {
         this->key = std::basic_string<uint8_t>((uint8_t*)pwkey.c_str(), pwkey.length());
         this->encryption_metadata = std::basic_string<uint8_t>(metadata, metadata_size);
@@ -606,6 +623,7 @@ bool File::unlock(std::string& pw, std::fstream& archive_stream, bool& aborting_
         delete[] metadata;
         return false;
     }
+
 }
 
 

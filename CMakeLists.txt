@@ -17,7 +17,8 @@ find_package(QT NAMES Qt6 Qt5 COMPONENTS Widgets Concurrent REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets Concurrent REQUIRED)
 find_package(Threads)
 # find_package(Qt6 COMPONENTS Concurrent REQUIRED)
-find_library( divsufsort_lib divsufsort )
+find_library(libcrypto libcrypto++.a)
+find_library(divsufsort_lib divsufsort)
 
 add_executable(Turbo-Kompresor-2000
   main.cpp
@@ -59,5 +60,5 @@ add_executable(Turbo-Kompresor-2000
   cryptography.h cryptography.cpp
 )
 #[[qdiag]]
-target_link_libraries(Turbo-Kompresor-2000 PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Concurrent "${divsufsort_lib}" Threads::Threads)#  Qt6::Concurrent )
+target_link_libraries(Turbo-Kompresor-2000 PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Concurrent "${divsufsort_lib}" "${libcrypto}" Threads::Threads)#  Qt6::Concurrent )
 

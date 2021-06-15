@@ -117,7 +117,6 @@ void ProcessingDialog::closeEvent(QCloseEvent *event) {
 
 uint16_t ProcessingDialog::get_flags() {
     std::bitset<16> flags(0);
-    flags[0] = ui->checkBox_BWT->isChecked();   // Burrows-Wheeler transform
     flags[1] = ui->checkBox_MTF->isChecked();   // Move-to-front
     flags[2] = ui->checkBox_RLE->isChecked();   // Run-length encoding
 
@@ -143,7 +142,22 @@ uint16_t ProcessingDialog::get_flags() {
     flags[6] = (ui->groupBox_AES128->isChecked() and not ui->line_edit_AES128_password->text().isEmpty());  // AES-128
     // Will only be done if password is provided and checkbox is checked
 
-    flags[9] = true;        // enforces 8 MiB blocks
+    if (ui->groupBox_BWT->isChecked()) { // Burrows-Wheeler transform
+        switch (ui->comboBox_BWT->currentIndex()) {
+        case 0: {
+
+            flags[0] = true;    // BWT (DC3)
+            flags[9] = true;    // enforces 8 MiB blocks
+            break;
+        }
+
+        case 1:
+            flags[7] = true;    // BWT (divsufsort)
+            break;
+
+        }
+    }
+
 
     switch (ui->comboBox_checksum->currentIndex()) {
     case 0:     // SHA-1

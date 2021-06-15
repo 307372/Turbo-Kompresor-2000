@@ -3,6 +3,7 @@
 #include <cassert>
 
 #include <QHeaderView>
+#include <QApplication>
 
 
 TreeWidgetFolder::TreeWidgetFolder(QTreeWidgetItem *parent, Folder* ptr_to_folder, Archive* ptr_to_archive, bool filesize_scaled  )
