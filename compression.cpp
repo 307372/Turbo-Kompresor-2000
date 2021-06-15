@@ -60,7 +60,7 @@ void Compression::save_text(std::fstream &output) {
 }
 
 
-void Compression::BWT_make()
+void Compression::BWT_make()    // DC3
 {
     if (*aborting_var) return;
 
@@ -181,7 +181,7 @@ void Compression::BWT_reverse()
 }
 
 
-void Compression::BWT_make2()
+void Compression::BWT_make2()   // divsufsort
 {
     if (*aborting_var) return;
 
@@ -252,13 +252,9 @@ void Compression::BWT_make2()
         encoded[n+index] = ( original_message_index >> (index*8u)) & 0xFFu;
 
     // replacing this->text with encoded text
-    delete[] this->text;
-    this->text = new uint8_t [n+4];
-
-    for (uint32_t i=0; i < n+4; ++i) {
-        this->text[i] = encoded[i];
-    }
-
+    this->size = n+4;
+    std::swap(text, encoded);
+    delete[] encoded;
     this->size = n+4;
 }
 
@@ -317,14 +313,9 @@ void Compression::BWT_reverse2()
         return;
     }
 
-    delete[] this->text;
-    this->text = new uint8_t [encoded_length];
-
-    for (uint32_t i=0; i<encoded_length; i++ ) {
-        this->text[i] = decoded[i];
-    }
-    delete[] decoded;
+    std::swap(this->text, decoded);
     this->size = encoded_length;
+    delete[] decoded;
 }
 
 

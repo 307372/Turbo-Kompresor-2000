@@ -27,6 +27,11 @@ namespace multithreading
     {
         std::bitset<16> bin_flags = flags;
         if (task == multithreading::mode::compress) {
+            if (bin_flags[7] and !aborting_var) {
+                comp->BWT_make2();
+                if (progress_ptr != nullptr) (*progress_ptr)++;
+            }
+
             if (bin_flags[0] and !aborting_var) {
                 comp->BWT_make();
                 if (progress_ptr != nullptr) (*progress_ptr)++;
@@ -114,6 +119,11 @@ namespace multithreading
 
             if ( bin_flags[0] and !aborting_var ) {
                 comp->BWT_reverse();
+                if (progress_ptr != nullptr) (*progress_ptr)++;
+            }
+
+            if ( bin_flags[7] and !aborting_var ) {
+                comp->BWT_reverse2();
                 if (progress_ptr != nullptr) (*progress_ptr)++;
             }
         }

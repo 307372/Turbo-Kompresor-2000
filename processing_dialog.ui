@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>317</width>
-    <height>361</height>
+    <height>358</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -145,16 +145,50 @@
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_5">
           <item>
-           <widget class="QCheckBox" name="checkBox_BWT">
-            <property name="toolTip">
-             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Prepares data for other compression algorithms, by arranging source symbols into runs of similar characters.&lt;/p&gt;&lt;p&gt;Usually helpful.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-            </property>
-            <property name="text">
+           <widget class="QGroupBox" name="groupBox_BWT">
+            <property name="title">
              <string>Burrows-Wheeler transform</string>
             </property>
-            <property name="checked">
+            <property name="checkable">
              <bool>true</bool>
             </property>
+            <layout class="QVBoxLayout" name="_verticalLayout_9">
+             <property name="spacing">
+              <number>0</number>
+             </property>
+             <property name="sizeConstraint">
+              <enum>QLayout::SetMaximumSize</enum>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QComboBox" name="comboBox_BWT">
+               <property name="currentIndex">
+                <number>1</number>
+               </property>
+               <item>
+                <property name="text">
+                 <string>DC3 (slow)</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>divsufsort (fast)</string>
+                </property>
+               </item>
+              </widget>
+             </item>
+            </layout>
            </widget>
           </item>
           <item>
