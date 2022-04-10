@@ -13,10 +13,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_compile_options(-Wall;-msse2;-msse;-maes)
 
-find_package(QT NAMES Qt6 Qt5 COMPONENTS Widgets Concurrent REQUIRED)
-find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets Concurrent REQUIRED)
+#find_package(Qt5 COMPONENTS Widgets Concurrent REQUIRED)
 find_package(Threads)
-# find_package(Qt6 COMPONENTS Concurrent REQUIRED)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Concurrent Core5Compat)
 find_library(libcrypto libcrypto++.a)
 find_library(divsufsort_lib divsufsort)
 
@@ -60,5 +59,5 @@ add_executable(Turbo-Kompresor-2000
   cryptography.h cryptography.cpp
 )
 #[[qdiag]]
-target_link_libraries(Turbo-Kompresor-2000 PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Concurrent "${divsufsort_lib}" "${libcrypto}" Threads::Threads)#  Qt6::Concurrent )
+target_link_libraries(Turbo-Kompresor-2000 PRIVATE Qt6::Widgets Qt6::Concurrent "${divsufsort_lib}" "${libcrypto}" Threads::Threads PUBLIC Qt6::Core5Compat)#  Qt6::Concurrent )
 
