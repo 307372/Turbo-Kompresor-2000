@@ -1,5 +1,7 @@
-# Turbo Kompresor 2000
-![TK2K logo](../main/resources/icons/archive.png?raw=true)
+<h1 align="center">Turbo Kompresor 2000</h1>
+<p align="center">
+  <img src="../main/resources/icons/archive.png" height="10%" width="10%"/>
+</p>
 
 ## 1. Czym jest Turbo Kompresor 2000?
 ![Main window](../assets/archive_view.png?raw=true)
