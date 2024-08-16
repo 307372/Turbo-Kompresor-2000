@@ -9,7 +9,6 @@
 
 #include <divsufsort.h> // external library
 
-#include "cryptography.h"
 #include "misc/bitbuffer.h"
 #include "misc/model.h"
 #include "misc/dc3.h"
@@ -357,7 +356,7 @@ void Compression::MTF_make()
     for (uint32_t i=0; i < textlength and !*aborting_var; i++) {
         // finding current letter's place in alphabet
         uint16_t letter_position = 0;
-        std::_List_iterator<uint8_t> iter = alphabet.begin();
+        auto iter = alphabet.begin();
         while( *iter != this->text[i] ) {
             ++letter_position;
             ++iter;
@@ -421,7 +420,7 @@ void Compression::MTF_reverse()
 
     for (uint32_t i=0; i < textlength and !*aborting_var; i++) {
         // finding current letter's place in alphabet
-        std::_List_iterator<uint8_t> iter = alphabet.begin();
+        auto iter = alphabet.begin();
         for (uint16_t j=0; j < this->text[i]; ++j) {
             iter++;
         }
@@ -1417,126 +1416,5 @@ void Compression::rANS_reverse()
 
     delete[] decoded;
     delete[] index2char;
-}
-
-
-void Compression::AES128_make(uint8_t key[], uint32_t key_size, uint8_t iv[], uint32_t iv_size, uint8_t metadata[], uint8_t metadata_size)
-{
-    if (*aborting_var) return;
-
-    uint64_t original_size = this->size;
-    crypto::AES128::encrypt(this->text, original_size, key, key_size, iv, iv_size);
-    this->size = original_size;
-    if (this->part_id == 0) {   // if this is the 1st block, we'll need to add the metadata necessary for decryption
-        assert(metadata != nullptr);
-        assert(metadata_size != 0);
-
-        uint32_t prepended_size = metadata_size + this->size;
-        auto* prepended_with_metadata = new uint8_t [prepended_size];
-
-        // prepending ciphertext with metadata
-        for (uint32_t i=0; i < metadata_size; ++i) {
-            prepended_with_metadata[i] = metadata[i];
-        }
-
-        for (uint64_t i = 0; i < this->size; ++i ) {
-            prepended_with_metadata[metadata_size + i] = this->text[i];
-        }
-
-        std::swap(this->text, prepended_with_metadata);
-        std::swap(this->size, prepended_size);
-        delete[] prepended_with_metadata;
-    }
-}
-
-
-void Compression::AES128_reverse(uint8_t key[], uint32_t key_size) {
-
-    if (*aborting_var) return;
-
-    uint64_t temp_size = this->size;    // without this, casting the value to uint64_t will cause a bug
-    crypto::AES128::decrypt(this->text, temp_size, key, key_size);
-    this->size = temp_size;
-}
-
-
-void Compression::AES128_extract_metadata(uint8_t*& metadata, uint32_t& metadata_size)
-{
-    if (*aborting_var) return;
-
-    assert(part_id == 0);
-    metadata_size = crypto::AES128::metadata_size;
-    metadata = new uint8_t [metadata_size];
-
-    for (uint32_t i=0; i < metadata_size; ++i) {
-        metadata[i] = this->text[i];
-    }
-
-    for (uint32_t i = metadata_size; i < this->size; ++i) {
-        this->text[i-metadata_size] = this->text[i];
-    }
-    this->size -= metadata_size;
-}
-
-
-bool Compression::AES128_verify_password_str(std::string& pw, uint8_t *metadata, uint32_t metadata_size)
-{
-    if (*aborting_var) return false;
-
-    assert(metadata_size == crypto::AES128::metadata_size);
-    const uint32_t aes128_key_size = 16;
-
-    // we'll need to parse metadata to verify the password
-    uint32_t salt_size = crypto::PBKDF2::saltSize;
-    uint8_t salt[salt_size];
-
-    uint64_t loading_offset = 0;
-    for (uint64_t i=0; i < salt_size; ++i) {    // loading salt
-        salt[i] = metadata[i];
-    }
-    loading_offset += salt_size;
-
-    const uint32_t iterations_size = 8;
-    uint64_t iterations = 0;        // needs to be 8 bytes long!
-
-
-    for (uint64_t i=0; i < iterations_size; ++i) {                      // loading the number of iterations
-        iterations += ((uint64_t)metadata[loading_offset + i] << (i * 8u));
-    }
-    loading_offset += iterations_size;
-
-    std::string pkey = crypto::PBKDF2::HMAC_SHA256(pw, salt, salt_size, iterations, aes128_key_size, *this->aborting_var);
-
-    uint64_t encrypted_key_size = 16+16;    // 0-15 - IV, 16-31 - ciphertext
-    auto* encrypted_key = new uint8_t [encrypted_key_size];
-    for (uint32_t i=0; i < encrypted_key_size; ++i) {
-        encrypted_key[i] = metadata[loading_offset++];
-    }
-
-
-    crypto::AES128::decrypt(encrypted_key, encrypted_key_size, (uint8_t*) pkey.c_str(), pkey.length());
-
-    uint32_t hmac_size = 32;
-    std::string generated_hmac = crypto::HMAC::SHA256(metadata + salt_size + iterations_size, hmac_size,
-                                                      encrypted_key, encrypted_key_size, *this->aborting_var);
-
-    auto* hmac = new uint8_t [hmac_size];
-
-
-    for (uint64_t i=0; i < hmac_size; ++i) {    // loading HMAC-SHA256
-        hmac[i] = metadata[loading_offset++];
-    }
-
-    bool correct_password = true;
-
-    for (uint32_t i=0; i < hmac_size; ++i){
-        if (hmac[i] != (uint8_t) generated_hmac[i]) {
-            correct_password = false;
-            break;
-        }
-    }
-
-    delete[] hmac;
-    delete[] encrypted_key;
-    return correct_password;
+    std::cout << "rANS_reverse DONE\n";
 }

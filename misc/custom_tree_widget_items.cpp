@@ -71,33 +71,19 @@ TreeWidgetFile::TreeWidgetFile(TreeWidgetFolder *parent, File* ptr_to_file, Arch
     this->file_ptr = ptr_to_file;
     this->archive_ptr = ptr_to_archive;
 
-    // checking if the file is encrypted, as locked files need lock icon
-    if (file_ptr->is_encrypted()) {
-        this->FileIcon = QIcon(":/locked.png");
-        this->setIcon(0, FileIcon);
-    }
-    else {
         this->FileIcon = QIcon(":/file.png");
         this->setIcon(0, FileIcon);
-    }
-    if (ptr_to_file->sibling_ptr) parent->addChild( new TreeWidgetFile( parent, ptr_to_file->sibling_ptr.get(), ptr_to_archive, filesize_scaled ) );
+
+    if (ptr_to_file->sibling_ptr)
+    {
+        parent->addChild(
+            new TreeWidgetFile(
+                parent,
+                ptr_to_file->sibling_ptr.get(),
+                ptr_to_archive,
+                filesize_scaled));
 }
-
-bool TreeWidgetFile::try_unlocking(std::string& pw)
-// attempts to unlock the file using user-provided password
-{
-    bool fake_aborting_var = false; // We don't want this interrupted
-
-    bool success = this->file_ptr->unlock(pw, this->archive_ptr->archive_file, fake_aborting_var);
-
-    if (success) {
-        this->FileIcon = QIcon(":/unlocked.png");
-        this->setIcon(0, FileIcon);
-    }
-
-    return success;
 }
-
 
 bool TreeWidgetFile::operator<(const QTreeWidgetItem &other)const {
     //1001 - TreeWidgetFolder

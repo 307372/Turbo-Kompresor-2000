@@ -12,10 +12,11 @@
 #include <sstream>
 #include <random>
 #include <filesystem>
+#include <condition_variable>
+#include <iostream>
 
 #include "integrity_validation.h"
 #include "compression.h"
-#include "cryptography.h"
 
 namespace multithreading
 {
@@ -62,36 +63,9 @@ namespace multithreading
                 if (progress_ptr != nullptr) (*progress_ptr)++;
             }
 
-            if (bin_flags[6] and !aborting_var) {   // AES-128
-                assert(key != nullptr);
-
-                // generating IV
-                std::mt19937 unsafe_gen(std::random_device{}());
-                uint32_t iv_size = 16;
-                auto* iv = new uint8_t [iv_size];
-                // initialisation vector doesn't need to be cryptographically secure
-                crypto::PRNG::fill_with_random_data(iv, iv_size, unsafe_gen);
-
-                uint32_t key_size = 16;
-                if (comp->part_id == 0) {   // block 0 needs to be prepended with metadata
-                    assert(metadata != nullptr);
-                    assert(metadata_size !=0);
-                    comp->AES128_make(key, key_size, iv, iv_size, metadata, metadata_size);
-                }
-                else {
-                    comp->AES128_make(key, key_size, iv, iv_size);
-                }
-                delete[] iv;
-                if (progress_ptr != nullptr) (*progress_ptr)++;
-            }
         }
         else if (task == multithreading::mode::decompress)
         {
-            if (bin_flags[6] and !aborting_var) {   // AES-128
-                comp->AES128_reverse(key, crypto::AES128::key_size);
-                if (progress_ptr != nullptr) (*progress_ptr)++;
-            }
-
             if ( bin_flags[5] and !aborting_var) {
                 comp->rANS_reverse();
                 if (progress_ptr != nullptr) (*progress_ptr)++;
@@ -131,14 +105,25 @@ namespace multithreading
     }
 
 
-    void processing_scribe( multithreading::mode task, std::fstream& output, std::vector<Compression*>& comp_v,
-                            bool worker_finished[], uint32_t block_count, uint64_t* compressed_size,
-                            std::string& checksum, bool& checksum_done, uint64_t original_size, bool& aborting_var, bool* successful )
+    void processing_scribe(
+            multithreading::mode task,
+            std::fstream& output,
+            std::vector<Compression*>& comp_v,
+            bool worker_finished[],
+            uint32_t block_count,
+            uint64_t* compressed_size,
+            std::string& checksum,
+            bool& checksum_done,
+            uint64_t original_size,
+            bool& aborting_var,
+            bool* successful,
+            std::condition_variable& cond,
+            std::mutex& cond_mut)
     {
         assert( output.is_open() );
         uint32_t next_to_write = 0;  // index of last written block of data in comp_v
         *compressed_size = 0;
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::unique_lock<std::mutex> lock(cond_mut);
         while ( next_to_write != block_count )
         {
             if (aborting_var) return;
@@ -156,20 +141,28 @@ namespace multithreading
                 comp_v[next_to_write]->save_text(output);
                 delete comp_v[next_to_write];
                 comp_v[next_to_write] = nullptr;
+                std::cout << "Block " << next_to_write << " saved" << std::endl;
                 next_to_write++;
             }
-            else std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            else {
+                std::cout << "Waiting for block " << next_to_write << "to be finished" << std::endl;
+                cond.wait(lock); // awake after each block is finished
+            }
         }
         if (task == multithreading::mode::compress) {
-            while (!checksum_done or aborting_var) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            while (!checksum_done or aborting_var){
+                std::cout << "awaiting checksum" << std::endl;
+                cond.wait(lock);
+            }
             if (aborting_var) return;
             if (checksum.length() != 0) output.write(checksum.c_str(), checksum.length());
             *successful = true; // if this didn't crash, then I guess it succeeded
+            std::cout << "Checksum done" << std::endl;
 
         }
         else if (task == multithreading::mode::decompress)
         {
-            while (!checksum_done) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            while (!checksum_done) cond.wait(lock); // awake after checksum is completed //std::this_thread::sleep_for(std::chrono::milliseconds(50));
             if (aborting_var) return;
             if (checksum.length() != 0)
             {
@@ -188,7 +181,6 @@ namespace multithreading
                 {
                     new_checksum = iv.get_SHA256_from_stream(output, aborting_var);
                 }
-
 
                 if (new_checksum == checksum) {
                     *successful = true;
@@ -220,6 +212,8 @@ namespace multithreading
     {
         assert( task == mode::compress xor task == mode::decompress );
         assert(archive_stream.is_open());
+        std::cout << target_path << std::endl;
+        if (task == mode::compress)
         assert(std::filesystem::exists(target_path));
 
         std::bitset<16> bin_flags = flags;
@@ -229,8 +223,6 @@ namespace multithreading
         if ( bin_flags[10] ) block_size >>= 2;
         if ( bin_flags[11] ) block_size >>= 4;
         if ( bin_flags[12] ) block_size >>= 8;
-
-
 
         uint32_t block_count = ceill((long double)original_size / block_size);
         if (block_count == 1) block_size = original_size;
@@ -242,7 +234,6 @@ namespace multithreading
         // preparing vector of empty Compression objects for threads
         std::vector<Compression*> comp_v;
         for (uint32_t i=0; i < block_count; ++i) comp_v.emplace_back(new Compression(aborting_var));
-
 
         uint32_t worker_count = std::thread::hardware_concurrency();
         // "if value is not well defined or not computable, (std::thread::hardware_concurrency) returns 0" ~cppreference.com
@@ -257,8 +248,8 @@ namespace multithreading
             target_stream.close();
             target_stream.open(target_path, std::ios::binary | std::ios::in | std::ios::out);
         }
-        assert( archive_stream.is_open() );
-        assert( target_stream.is_open() );
+        assert(archive_stream.is_open());
+        assert(target_stream.is_open());
 
 
         bool* task_finished_arr = new bool[block_count];
@@ -287,23 +278,6 @@ namespace multithreading
                 archive_stream.read((char*)&comp_v[i]->part_id, sizeof(comp_v[i]->part_id));
                 archive_stream.read((char*)&comp_v[i]->size, sizeof(comp_v[i]->size));
                 comp_v[i]->load_text(archive_stream, comp_v[i]->size);
-
-                if (bin_flags[6] == true) {
-                    if (comp_v[i]->part_id == 0) {  // block 0 has metadata and we'll need to take it out
-                        comp_v[i]->AES128_extract_metadata(metadata, metadata_size);
-
-                        // then we'll need to decrypt randomly generated key, which is encrypted using PBKDF2(password)
-                        uint64_t real_key_size = crypto::AES128::key_size * 2;
-                        auto* real_key = new uint8_t [real_key_size];
-                        for (uint64_t key_i=0; key_i < real_key_size; ++key_i) {
-                            real_key[key_i] = metadata[24+key_i];
-                        }
-                        crypto::AES128::decrypt(real_key, real_key_size, *key, crypto::AES128::key_size);
-
-                        std::swap(real_key, *key);
-                        delete[] real_key;
-                    }
-                }
             }
 
             workers.emplace_back(&processing_worker, task, comp_v[i], flags, std::ref(aborting_var),
@@ -322,25 +296,29 @@ namespace multithreading
 
             return false;
         }
-
         std::thread scribe;
+        std::mutex scribe_mut;
+        std::unique_lock<std::mutex> scribe_lock(scribe_mut);
+        scribe_lock.unlock();
+        std::condition_variable scribe_cond{};
 
         bool successful = false;
 
         if (task == multithreading::mode::compress)
             scribe = std::thread( &processing_scribe, task, std::ref(archive_stream), std::ref(comp_v),
                                   task_finished_arr, block_count, compressed_size,
-                                  std::ref(checksum), std::ref(checksum_done), original_size, std::ref(aborting_var), &successful );
+                                  std::ref(checksum), std::ref(checksum_done), original_size, std::ref(aborting_var), &successful, std::ref(scribe_cond), std::ref(scribe_mut));
         else if (task == multithreading::mode::decompress)
             scribe = std::thread( &processing_scribe, task, std::ref(target_stream), std::ref(comp_v), task_finished_arr,
                                   block_count, compressed_size, std::ref(checksum), std::ref(checksum_done),
-                                  original_size, std::ref(aborting_var), &successful );
+                                  original_size, std::ref(aborting_var), &successful, std::ref(scribe_cond), std::ref(scribe_mut));
 
         while (lowest_free_work_ind != block_count and !aborting_var) {
 
             for (uint32_t i=0; i < workers.size() and !aborting_var; ++i) {
                 if (workers[i].joinable()) {
                     if (workers[i].joinable()) workers[i].join();
+                    scribe_cond.notify_one();
                     if (aborting_var) break;
 
                     if (lowest_free_work_ind != block_count) {
@@ -371,6 +349,7 @@ namespace multithreading
 
         if (aborting_var)
         {
+            scribe_cond.notify_one();
             for (auto& th: workers) if (th.joinable()) th.join();
             if (scribe.joinable()) scribe.join();
             delete[] task_finished_arr;
@@ -400,6 +379,7 @@ namespace multithreading
             }
 
             checksum_done = true;
+            scribe_cond.notify_one();
         }
         else if (task == multithreading::mode::decompress)
         {
@@ -420,9 +400,11 @@ namespace multithreading
             }
 
             checksum_done = true;
+            scribe_cond.notify_one();
         }
 
         for (auto& th : workers) if (th.joinable()) th.join();
+scribe_cond.notify_one();
         if (scribe.joinable()) scribe.join();
 
         delete[] task_finished_arr;

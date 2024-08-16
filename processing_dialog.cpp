@@ -138,10 +138,6 @@ uint16_t ProcessingDialog::get_flags() {
         flags[5] = true;
     }
 
-
-    flags[6] = (ui->groupBox_AES128->isChecked() and not ui->line_edit_AES128_password->text().isEmpty());  // AES-128
-    // Will only be done if password is provided and checkbox is checked
-
     if (ui->groupBox_BWT->isChecked()) { // Burrows-Wheeler transform
         switch (ui->comboBox_BWT->currentIndex()) {
         case 0: {
@@ -157,7 +153,6 @@ uint16_t ProcessingDialog::get_flags() {
 
         }
     }
-
 
     switch (ui->comboBox_checksum->currentIndex()) {
     case 0:     // SHA-1
@@ -292,15 +287,6 @@ void ProcessingDialog::on_pushButton_compress_clicked()
     if (parent_usertype == 1001) {  // TreeWidgetFolder
         for (auto &file_path : paths_to_files) {
             File* new_file_ptr = twfolder_ptr->archive_ptr->add_file_to_archive_model( *(twfolder_ptr->folder_ptr), file_path.toStdString(), flags );
-
-            if (bin_flags[6])   // AES-128
-            {
-                // Preparing the file for encryption
-                std::string password = ui->line_edit_AES128_password->text().toStdString();
-                bool fake_aborting_var = false; // this shouldn't be interrupted
-                new_file_ptr->prepare_for_encryption(password, fake_aborting_var);
-            }
-
             correct_duplicate_names(new_file_ptr, twfolder_ptr->folder_ptr);
             list_of_files.push_back( new_file_ptr );
         }
@@ -308,14 +294,6 @@ void ProcessingDialog::on_pushButton_compress_clicked()
     else if (parent_usertype == 1002) { // TreeWidgetFile
         for (auto &file_path : paths_to_files) {
             File* new_file_ptr = twfile_ptr->archive_ptr->add_file_to_archive_model( *(twfile_ptr->file_ptr->parent_ptr), file_path.toStdString(), flags );
-
-            if (bin_flags[6])   // AES-128
-            {
-                // Preparing the file for encryption
-                std::string password = ui->line_edit_AES128_password->text().toStdString();
-                bool fake_aborting_var = false; // this shouldn't be interrupted
-                new_file_ptr->prepare_for_encryption(password, fake_aborting_var);
-            }
 
             correct_duplicate_names(new_file_ptr, twfile_ptr->file_ptr->parent_ptr);
             list_of_files.push_back( new_file_ptr );
@@ -415,20 +393,6 @@ void ProcessingDialog::on_buttonDecompressionStart_clicked()
     for (auto single_folder : folders) single_folder->get_ptrs( folders, files );
     for (auto single_file   : files  ) single_file->get_ptrs( files );
 
-    for (int32_t i=0; i < files.size(); ++i) {
-        if (i >= 0) {
-            if (files[i]->is_locked()) {
-                bool success = this->ask_for_password_and_unlock(files[i]);
-                if (!success)
-                {
-                    files[i]->ptr_already_gotten = false;   // resetting the flag for future use
-                    files[i] = nullptr;
-                    files.erase(files.begin() + i);
-                    --i;
-                }
-            }
-        }
-    }
 
 
     if ( just_files ) {
@@ -555,27 +519,8 @@ void ProcessingDialog::on_button_decompression_path_dialog_clicked()
 {
     QString filter = "All Files (*.*)" ;
     QFileDialog dialog(this);
-    dialog.setFileMode(QFileDialog::DirectoryOnly);
+    dialog.setFileMode(QFileDialog::Directory);
     QString path_to_folder = dialog.getExistingDirectory(this, "Choose where you want extracted files to go");
     ui->lineEdit_decompression_path->setText(path_to_folder);
 }
 
-bool ProcessingDialog::ask_for_password_and_unlock(File* file_item)
-{
-    bool success = true;
-    if (file_item->is_locked())
-    {
-        bool not_canceled;
-        QString password = QInputDialog::getText(this, QString("Unlocking file ") + QString::fromStdString(file_item->name), "Password:", QLineEdit::Password, QString(), &not_canceled);
-
-        if (not not_canceled) {
-            return false;
-        }
-
-        std::string pw(password.toStdString());
-
-        bool fake_aborting_var = false;  // We probably wouldn't want this to be interrupted
-        success = file_item->unlock(pw, parent_mw->archive_ptr->archive_file, fake_aborting_var);
-    }
-    return success;
-}

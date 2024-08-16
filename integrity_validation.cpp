@@ -1,6 +1,7 @@
 #include "integrity_validation.h"
 
 #include <fstream>
+#include <sstream>
 #include <cassert>
 #include <vector>
 #include <filesystem>

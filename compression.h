@@ -41,15 +41,6 @@ public:
 
     void rANS_make();   // asymmetric numeral systems (range variant)
     void rANS_reverse();
-
-    void AES128_make(uint8_t key[], uint32_t key_size, uint8_t iv[], uint32_t iv_size,
-                     uint8_t metadata[]= nullptr, uint8_t metadata_size=0);
-    void AES128_reverse(uint8_t key[], uint32_t key_size);
-
-    bool AES128_verify_password_str(std::string& pw, uint8_t *metadata, uint32_t metadata_size);
-
-    void AES128_extract_metadata(uint8_t*& metadata, uint32_t& metadata_size);
-
 };
 
 #endif //COMPRESSION_DEV_COMPRESSION_H

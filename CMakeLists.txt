@@ -11,12 +11,11 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_compile_options(-Wall;-msse2;-msse;-maes)
+add_compile_options(-Wall;-msse2;-msse)
 
-#find_package(Qt5 COMPONENTS Widgets Concurrent REQUIRED)
 find_package(Threads)
 find_package(Qt6 REQUIRED COMPONENTS Widgets Concurrent Core5Compat)
-find_library(libcrypto libcrypto++.a)
+
 find_library(divsufsort_lib divsufsort)
 
 add_executable(Turbo-Kompresor-2000
@@ -56,8 +55,7 @@ add_executable(Turbo-Kompresor-2000
 
   resources/breeze/breeze.qrc
 
-  cryptography.h cryptography.cpp
 )
 #[[qdiag]]
-target_link_libraries(Turbo-Kompresor-2000 PRIVATE Qt6::Widgets Qt6::Concurrent "${divsufsort_lib}" "${libcrypto}" Threads::Threads PUBLIC Qt6::Core5Compat)#  Qt6::Concurrent )
 
+target_link_libraries(Turbo-Kompresor-2000 PRIVATE Qt6::Widgets Qt6::Concurrent "${divsufsort_lib}" PUBLIC Qt6::Core5Compat)#  Qt6::Concurrent )

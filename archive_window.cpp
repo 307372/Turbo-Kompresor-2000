@@ -349,39 +349,8 @@ void ArchiveWindow::open_settings_dialog()
     if (current_archive_path != "") reload_archive();
 }
 
-bool ArchiveWindow::ask_for_password_and_unlock(TreeWidgetFile* item)
-{
-    bool success = true;
-    if (item->file_ptr->is_locked())
-    {
-        bool not_canceled;
-        QString password = QInputDialog::getText(this, QString("Unlocking file ") + QString::fromStdString(item->file_ptr->name), "Password:", QLineEdit::Password, QString(), &not_canceled);
-
-        if (not not_canceled) {
-            return false;
-        }
-
-        std::string pw(password.toStdString());
-
-        success = item->try_unlocking(pw);
-    }
-    return success;
-}
 
 void ArchiveWindow::on_archiveWidget_itemSelectionChanged()
 {
-    QList<QTreeWidgetItem*> selected = ui->archiveWidget->selectedItems();
-    for (auto& item : selected) {
-        if (item->type() == 1002)   // TreeWidgetFile
-        {
-            TreeWidgetFile* file_item = reinterpret_cast<TreeWidgetFile*>(item);
-            if (file_item->file_ptr->is_locked()) {
 
-                bool success = ask_for_password_and_unlock(file_item);
-
-                if (not success) item->setSelected(false);
-                else item->setSelected(true);
-            }
-        }
-    }
 }
