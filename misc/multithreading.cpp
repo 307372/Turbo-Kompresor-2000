@@ -57,8 +57,7 @@ enum class AlgorithmFlag : std::uint16_t
     MTF,
     RLE,
     AC,
-    AC2,
-    rANS,
+    AC2
 };
 
 inline void compressIfNeeded(
@@ -91,9 +90,6 @@ inline void compressIfNeeded(
             case AlgorithmFlag::AC2:
             comp->AC2_make();
             break;
-            case AlgorithmFlag::rANS:
-            comp->rANS_make();
-            break;
         }
         incrementProgressCtr(progressCounterPtr);
     }
@@ -115,8 +111,7 @@ namespace multithreading
             AlgorithmFlag::MTF,
             AlgorithmFlag::RLE,
             AlgorithmFlag::AC,
-            AlgorithmFlag::AC2,
-            AlgorithmFlag::rANS};
+            AlgorithmFlag::AC2};
 
         for (auto algo : compressionOrder)
         {
@@ -159,9 +154,6 @@ inline void decompressIfNeeded(
             case AlgorithmFlag::AC2:
             comp->AC2_reverse();
             break;
-            case AlgorithmFlag::rANS:
-            comp->rANS_reverse();
-            break;
         }
         incrementProgressCtr(progressCounterPtr);
     }
@@ -174,7 +166,6 @@ inline void decompressIfNeeded(
         uint16_t* progressCounterPtr)
     {
         static const std::vector<AlgorithmFlag> decompressionOrder{
-            AlgorithmFlag::rANS,
             AlgorithmFlag::AC2,
             AlgorithmFlag::AC,
             AlgorithmFlag::RLE,
@@ -239,7 +230,7 @@ inline void decompressIfNeeded(
     {
         CRC32,
         SHA1,
-        SHA256,
+        SHA256
     };
 
     ChecksumType getChecksumTypeByLength(std::size_t length)
@@ -253,6 +244,7 @@ inline void decompressIfNeeded(
             case 64:
                 return ChecksumType::SHA256;
         }
+        throw std::runtime_error("Unknown checksum. Possible data corruption.");
     }
 
     std::string calculateChecksumFromDecompressedFile(
@@ -271,6 +263,7 @@ inline void decompressIfNeeded(
             case ChecksumType::SHA256:
                 return iv.get_SHA256_from_stream(output, aborting_var);
         }
+        throw std::runtime_error("Unknown checksum. Possible data corruption.");
     }
 
     void validateChecksumWhenReady(

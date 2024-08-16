@@ -38,9 +38,6 @@ public:
 
     void AC2_make();    // arithmetic coding (first-order Markov model)
     void AC2_reverse();
-
-    void rANS_make();   // asymmetric numeral systems (range variant)
-    void rANS_reverse();
 };
 
 #endif //COMPRESSION_DEV_COMPRESSION_H

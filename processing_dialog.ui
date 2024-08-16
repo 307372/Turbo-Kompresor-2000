@@ -230,7 +230,7 @@
              <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Entropy coding is the step, which usually does most of compressing among the algorithms I've implemented.&lt;br/&gt;&lt;/p&gt;&lt;p&gt;Better model gives better compression, but also has 256 KB overhead regardless of data type at the moment, so it's absurdly counterproductive for small files.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
             </property>
             <property name="currentIndex">
-             <number>3</number>
+             <number>2</number>
             </property>
             <item>
              <property name="text">
@@ -245,11 +245,6 @@
             <item>
              <property name="text">
               <string>Arithmetic coding (better model)</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>rANS (naive model)</string>
              </property>
             </item>
            </widget>

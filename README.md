@@ -14,7 +14,6 @@ Z algorytmów kompresji bezstratnej:
 - move-to-front
 - run-length encoding
 - arithmetic coding (2 wersje)
-- Asymmetric Numeral Systems (range variant)
 
 Do sprawdzania poprawności działania, zastosowałem:
 - CRC32

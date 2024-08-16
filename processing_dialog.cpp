@@ -133,9 +133,6 @@ uint16_t ProcessingDialog::get_flags() {
     case 2:     // Arithmetic coding (better model)
         flags[4] = true;
         break;
-
-    case 3:
-        flags[5] = true;
     }
 
     if (ui->groupBox_BWT->isChecked()) { // Burrows-Wheeler transform
