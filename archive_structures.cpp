@@ -30,7 +30,8 @@ bool File::process_the_file(
             &this->compressed_size,
             aborting_var,
             validate_integrity,
-            progress_ptr);
+            progress_ptr,
+            nullptr);
     }
     else
     {
@@ -44,7 +45,8 @@ bool File::process_the_file(
             &this->compressed_size,
             aborting_var,
             validate_integrity,
-            progress_ptr);
+            progress_ptr,
+            nullptr);
     }
 
     return successful;
@@ -125,7 +127,12 @@ void File::parse( std::fstream &os, uint64_t pos, Folder* parent ) {
 }
 
 
-bool File::write_to_archive( std::fstream &archive_file, bool& aborting_var, bool write_siblings, uint16_t* progress_var ) {
+bool File::write_to_archive(
+    std::fstream &archive_file,
+    bool& aborting_var,
+    bool write_siblings,
+    uint16_t* progress_var)
+{
     bool successful = false;
     if (!this->alreadySaved and !aborting_var) {
         this->alreadySaved = true;
@@ -251,7 +258,13 @@ bool File::write_to_archive( std::fstream &archive_file, bool& aborting_var, boo
 }
 
 
-bool File::unpack( const std::string& path_to_destination, std::fstream &os, bool& aborting_var, bool unpack_all, bool validate_integrity, uint16_t* progress_var )
+bool File::unpack(
+    const std::string& path_to_destination,
+    std::fstream &os,
+    bool& aborting_var,
+    bool unpack_all,
+    bool validate_integrity,
+    uint16_t* progress_var)
 {
     uint64_t backup_g = os.tellg();
     os.seekg( this->data_location );

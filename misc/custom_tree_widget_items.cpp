@@ -63,7 +63,13 @@ void TreeWidgetFile::unpack( std::string path_for_extraction, bool& aborting_var
 
 
 TreeWidgetFile::TreeWidgetFile(TreeWidgetFolder *parent, File* ptr_to_file, Archive* ptr_to_archive, bool filesize_scaled)
-: QTreeWidgetItem(parent, QStringList() << ptr_to_file->name.c_str() << QString::fromStdString( ptr_to_file->get_uncompressed_filesize_str(filesize_scaled)) << QString::fromStdString(ptr_to_file->get_compressed_filesize_str(filesize_scaled)) << QString::number((float)ptr_to_file->original_size/(float)(ptr_to_file->compressed_size)), QTreeWidgetItem::UserType+2 )
+: QTreeWidgetItem(
+    parent,
+    QStringList() << ptr_to_file->name.c_str()
+                    << QString::fromStdString(ptr_to_file->get_uncompressed_filesize_str(filesize_scaled))
+                    << QString::fromStdString(ptr_to_file->get_compressed_filesize_str(filesize_scaled))
+                    << QString::number((float)ptr_to_file->original_size / (float)(ptr_to_file->compressed_size)),
+    QTreeWidgetItem::UserType+2)
 {
     this->setTextAlignment(1, Qt::AlignRight);
     this->setTextAlignment(2, Qt::AlignRight);
@@ -71,8 +77,8 @@ TreeWidgetFile::TreeWidgetFile(TreeWidgetFolder *parent, File* ptr_to_file, Arch
     this->file_ptr = ptr_to_file;
     this->archive_ptr = ptr_to_archive;
 
-        this->FileIcon = QIcon(":/file.png");
-        this->setIcon(0, FileIcon);
+    this->FileIcon = QIcon(":/file.png");
+    this->setIcon(0, FileIcon);
 
     if (ptr_to_file->sibling_ptr)
     {
@@ -82,7 +88,7 @@ TreeWidgetFile::TreeWidgetFile(TreeWidgetFolder *parent, File* ptr_to_file, Arch
                 ptr_to_file->sibling_ptr.get(),
                 ptr_to_archive,
                 filesize_scaled));
-}
+    }
 }
 
 bool TreeWidgetFile::operator<(const QTreeWidgetItem &other)const {
