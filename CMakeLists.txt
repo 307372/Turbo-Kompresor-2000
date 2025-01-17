@@ -21,6 +21,8 @@ find_library(divsufsort_lib divsufsort)
 add_executable(Turbo-Kompresor-2000
   main.cpp
 
+  cli.hpp cli.cpp
+
   archive_window.cpp archive_window.h archive_window.ui
 
   processing_dialog.cpp processing_dialog.h processing_dialog.ui
