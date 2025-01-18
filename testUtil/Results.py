@@ -1,0 +1,51 @@
+# import statistics
+import consts
+
+class Results:
+    def __init__(self):
+        # self._testCount = 0
+        # self._results = {consts.CmdMode.PACK: [], consts.CmdMode.UNPACK: []}
+        self._timePack = 999999999999999
+        self._timeUnpack = 999999999999999
+        self._sizeBase = -1
+        self._sizePacked = -1
+
+
+    def addResults(self, packResult, unpackResult):
+        if self._timePack > packResult:
+            self._timePack = packResult
+        
+        if self._timeUnpack > unpackResult:
+            self._timeUnpack = unpackResult
+        
+        # self._results[consts.CmdMode.PACK].append(packResult)
+        # self._results[consts.CmdMode.UNPACK].append(unpackResult)
+        # self._testCount += 1
+
+
+    def setBaseSize(self, size):
+        self._sizeBase = size
+
+    def setPackedSize(self, size):
+        self._sizePacked = size
+
+    def getPackedSize(self):
+        return self._sizePacked
+
+    def getBaseSize(self):
+        return self._sizeBase
+
+    def getTime(self, cmdMode):
+        return self._getTimeMin(cmdMode)
+    
+    def getEffectiveness(self):
+        return round(self._sizePacked * 100 / self._sizeBase, ndigits=1)
+
+
+    def _getTimeMin(self, cmdMode):
+        if cmdMode == consts.CmdMode.PACK:
+            return self._timePack
+        else:
+            return self._timeUnpack
+
+
