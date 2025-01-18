@@ -1,8 +1,20 @@
 #include "cli.hpp"
+#include "archive.h"
+#include "misc/multithreading.h"
 
+#include <bitset>
+#include <string>
+#include <cassert>
+#include <sstream>
+#include <iostream>
+#include <map>
 #include <exception>
+#include <algorithm>
+#include <optional>
 
-
+using Args = std::vector<std::string>;
+extern std::vector<AlgorithmFlag> compressionOrder;
+extern std::vector<AlgorithmFlag> decompressionOrder;
 namespace cli
 {
 namespace args
@@ -46,7 +58,7 @@ std::string enumToParam(ArgType arg)
 
 } // namespace args
 
-std::string getArgTypeue(args::ArgType arg, Args args, int argInd)
+std::string getArgValue(args::ArgType arg, Args args, int argInd)
 {
     std::string paramSubstr = enumToParam(arg);
     return args[argInd].substr(paramSubstr.length());
@@ -73,10 +85,25 @@ std::string parseMandatoryString(args::ArgType argType, Args args)
     {
         throw std::runtime_error("Error: No " + args::enumToString[argType] + " given");
     }
-    std::string argVal = getArgTypeue(argType, args, argInd);
+    std::string argVal = getArgValue(argType, args, argInd);
     if (argVal.size() == 0)
     {
         throw std::runtime_error("Error: " + args::enumToString[argType] + " too short!");
+    }
+    return argVal;
+}
+
+std::optional<std::string> parseOptionalString(args::ArgType argType, Args args)
+{
+    size_t argInd = findArg(argType, args);
+    if (argInd == std::string::npos)
+    {
+        return std::nullopt;
+    }
+    std::string argVal = getArgValue(argType, args, argInd);
+    if (argVal.size() == 0)
+    {
+        return std::nullopt;
     }
     return argVal;
 }
@@ -95,10 +122,52 @@ multithreading::mode parseOperationMode(Args args)
     throw std::runtime_error("Error: unknown operation mode");
 }
 
+std::vector<std::string> splitString(std::string str, char delimiter)
+{
+    std::vector<std::string> result{};
+    std::string toAdd = "";
+    for (size_t i=0; i < str.length(); ++i)
+    {
+        if (str[i] != delimiter)
+        {
+            toAdd.push_back(str[i]);
+        }
+        else
+        {
+            result.push_back(toAdd);
+            toAdd = "";
+        }
+    }
+    if (not toAdd.empty()) result.push_back(toAdd);
+    return result;
+}
+
+
+
+std::bitset<16> parseCustomAlgorithm(std::string algoString)
+{
+    std::vector<std::string> algoVector = splitString(algoString, '+');
+    std::vector<AlgorithmFlag> algoFlagVector{};
+    std::bitset<16> flagset{0};
+    for (const auto algStr : algoVector)
+    {
+        const AlgorithmFlag flag = multithreading::strToAlgorithmFlag[algStr];
+        flagset.set(static_cast<std::uint16_t>(flag));
+        algoFlagVector.push_back(flag);
+    }
+    compressionOrder = algoFlagVector;
+    decompressionOrder = algoFlagVector;
+    std::reverse(decompressionOrder.begin(), decompressionOrder.end());
+    std::cout << "compressionOrder changed ";
+    return flagset;
+}
+
 std::bitset<16> parseAlgorithmFlags(Args args)
 {
-    std::string argVal = parseMandatoryString(args::ArgType::alg, args);
+    std::optional<std::string> argOpt = parseOptionalString(args::ArgType::alg, args);
     std::bitset<16> flags{0};
+    if (argOpt == std::nullopt) return flags;
+    std::string argVal = argOpt.value();
     if (argVal == "1")
     {
         // flags.set(15); // SHA-1
@@ -119,7 +188,9 @@ std::bitset<16> parseAlgorithmFlags(Args args)
         flags.set(4); // AC (better)
         return flags;
     }
-    throw std::runtime_error("Error: unknown alg id");
+    else return parseCustomAlgorithm(argVal);
+    return flags;
+    // throw std::runtime_error("Error: unknown alg id");
 }
 
 std::string parseArchivePath(Args args)
@@ -173,6 +244,11 @@ void parseArgs(Args args)
     }
     else
     {
+        try
+        {
+            parseAlgorithmFlags(args);
+        }
+        catch(std::exception&) {}
         std::string outputPath = parseOutputPath(args);
         unpackArchiveWithSingleCompressedFile(outputPath, archivePath);
     }

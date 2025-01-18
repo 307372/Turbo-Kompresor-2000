@@ -1,6 +1,9 @@
 #ifndef MULTITHREADING_H
 #define MULTITHREADING_H
 
+#include "integrity_validation.h"
+#include "compression.h"
+
 #include <cmath>
 #include <bitset>
 #include <vector>
@@ -9,12 +12,52 @@
 #include <mutex>
 #include <condition_variable>
 #include <sstream>
+#include <map>
 
-#include "integrity_validation.h"
-#include "compression.h"
+
+
+enum class AlgorithmFlag : std::uint16_t
+{
+    BWT2 = 7,
+    BWT = 0,
+    MTF,
+    RLE,
+    AC,
+    AC2
+};
+
+
+
+
 
 namespace multithreading
 {
+static std::map<std::string, AlgorithmFlag> strToAlgorithmFlag{
+        {"BWT", AlgorithmFlag::BWT},
+        {"BWT2", AlgorithmFlag::BWT2},
+        {"MTF", AlgorithmFlag::MTF},
+        {"RLE", AlgorithmFlag::RLE},
+        {"AC", AlgorithmFlag::AC},
+        {"AC2", AlgorithmFlag::AC2},
+    }; 
+
+// std::vector<AlgorithmFlag> compressionOrder{
+//     AlgorithmFlag::BWT,
+//     AlgorithmFlag::BWT2,
+//     AlgorithmFlag::MTF,
+//     AlgorithmFlag::RLE,
+//     AlgorithmFlag::AC,
+//     AlgorithmFlag::AC2};
+
+
+// static std::vector<AlgorithmFlag> decompressionOrder{
+//     AlgorithmFlag::AC2,
+//     AlgorithmFlag::AC,
+//     AlgorithmFlag::RLE,
+//     AlgorithmFlag::MTF,
+//     AlgorithmFlag::BWT2,
+//     AlgorithmFlag::BWT};
+
     using Flagset = std::bitset<16>;
 
     enum class mode : int

@@ -50,16 +50,6 @@ inline void incrementProgressCtr(uint16_t* progressCounterPtr)
     }
 }
 
-enum class AlgorithmFlag : std::uint16_t
-{
-    BWT2 = 7,
-    BWT = 0,
-    MTF,
-    RLE,
-    AC,
-    AC2
-};
-
 inline void compressIfNeeded(
     Compression* comp,
     const AlgorithmFlag& algorithmFlag,
@@ -74,21 +64,32 @@ inline void compressIfNeeded(
         {
             case AlgorithmFlag::BWT:
             comp->BWT_make();
+            std::cout << "BWT_make ";
             break;
+
             case AlgorithmFlag::BWT2:
             comp->BWT_make2();
+            std::cout << "BWT_make2 ";
             break;
+
             case AlgorithmFlag::MTF:
             comp->MTF_make();
+            std::cout << "MTF_make ";
             break;
+
             case AlgorithmFlag::RLE:
             comp->RLE_makeV2();
+            std::cout << "RLE_makeV2 ";
             break;
+
             case AlgorithmFlag::AC:
             comp->AC_make();
+            std::cout << "AC_make ";
             break;
+
             case AlgorithmFlag::AC2:
             comp->AC2_make();
+            std::cout << "AC2_make ";
             break;
         }
         incrementProgressCtr(progressCounterPtr);
@@ -96,6 +97,22 @@ inline void compressIfNeeded(
 }
 
 }
+
+std::vector<AlgorithmFlag> compressionOrder{
+    AlgorithmFlag::BWT,
+    AlgorithmFlag::BWT2,
+    AlgorithmFlag::MTF,
+    AlgorithmFlag::RLE,
+    AlgorithmFlag::AC,
+    AlgorithmFlag::AC2};
+
+std::vector<AlgorithmFlag> decompressionOrder{
+    AlgorithmFlag::AC2,
+    AlgorithmFlag::AC,
+    AlgorithmFlag::RLE,
+    AlgorithmFlag::MTF,
+    AlgorithmFlag::BWT2,
+    AlgorithmFlag::BWT};
 
 namespace multithreading
 {
@@ -105,14 +122,6 @@ namespace multithreading
         bool& aborting_var,
         uint16_t* progressCounterPtr)
     {
-        static const std::vector<AlgorithmFlag> compressionOrder{
-            AlgorithmFlag::BWT,
-            AlgorithmFlag::BWT2,
-            AlgorithmFlag::MTF,
-            AlgorithmFlag::RLE,
-            AlgorithmFlag::AC,
-            AlgorithmFlag::AC2};
-
         for (auto algo : compressionOrder)
         {
             compressIfNeeded(
@@ -165,13 +174,6 @@ inline void decompressIfNeeded(
         bool& aborting_var,
         uint16_t* progressCounterPtr)
     {
-        static const std::vector<AlgorithmFlag> decompressionOrder{
-            AlgorithmFlag::AC2,
-            AlgorithmFlag::AC,
-            AlgorithmFlag::RLE,
-            AlgorithmFlag::MTF,
-            AlgorithmFlag::BWT2,
-            AlgorithmFlag::BWT};
         for (auto algo : decompressionOrder)
         {
             decompressIfNeeded(
