@@ -25,7 +25,8 @@ std::vector<ArgType> options =
         ArgType::alg,
         ArgType::archive,
         ArgType::output,
-        ArgType::fileToAdd
+        ArgType::fileToAdd,
+        ArgType::blockSize
     };
 
 std::vector<std::string> enumToString =
@@ -34,7 +35,8 @@ std::vector<std::string> enumToString =
         "alg",
         "archive",
         "output",
-        "fileToAdd"
+        "fileToAdd",
+        "blockSize"
     }; 
 
 std::map<std::string, ArgType> strToEnum =
@@ -44,6 +46,7 @@ std::map<std::string, ArgType> strToEnum =
         {"archive", ArgType::archive},
         {"output", ArgType::output},
         {"fileToAdd", ArgType::fileToAdd},
+        {"blockSize", ArgType::blockSize},
     }; 
 
 std::string strToParam(std::string text)
@@ -193,6 +196,59 @@ std::bitset<16> parseAlgorithmFlags(Args args)
     // throw std::runtime_error("Error: unknown alg id");
 }
 
+std::bitset<16> parseBlockSizeFlags(Args args)
+{
+    std::optional<std::string> stringBlockSize = parseOptionalString(args::ArgType::blockSize, args);
+    std::bitset<16> result{0};
+    if (not stringBlockSize.has_value())
+        return result;
+
+    // worse than awful
+    switch(int(std::stof(stringBlockSize.value())*8))
+    {
+        case 16*8:
+        break;
+
+        case 8*8:
+        result.set(9);
+        break;
+        
+        case 4*8:
+        result.set(10);
+        break;
+
+        case 2*8:
+        result.set(9);
+        result.set(10);
+        break;
+
+        case 1*8:
+        result.set(11);
+        break;
+
+        case int(0.5*8):
+        result.set(11);
+        result.set(9);
+        break;
+
+        case int(0.25*8):
+        result.set(11);
+        result.set(10);
+        break;
+        
+
+        case int(0.125*8):
+        result.set(11);
+        result.set(10);
+        result.set(9);
+        break;
+
+        default:
+        throw std::invalid_argument("Error: block size incompatible with tk2k");
+    }
+    return result;
+}
+
 std::string parseArchivePath(Args args)
 {
     return parseMandatoryString(args::ArgType::archive, args);
@@ -238,9 +294,10 @@ void parseArgs(Args args)
 
     if (opMode == multithreading::mode::compress)
     {
-        std::bitset<16> flags = parseAlgorithmFlags(args);
+        std::bitset<16> algoFlags = parseAlgorithmFlags(args);
+        std::bitset<16> blockSizeflags = parseBlockSizeFlags(args);
         std::string fileToAddPath = parseFileToAddPath(args);
-        createArchiveWithSingleCompressedFile(flags, fileToAddPath, archivePath);
+        createArchiveWithSingleCompressedFile(algoFlags | blockSizeflags, fileToAddPath, archivePath);
     }
     else
     {

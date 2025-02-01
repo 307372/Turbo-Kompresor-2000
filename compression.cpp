@@ -486,7 +486,7 @@ void Compression::RLE_make()
             text[i] = output[i];
         }
 
-        size = output.length();
+        size = output.length(); // dirtiest of hacks XD
     }
     else {
         auto temp = new uint8_t [1+size];

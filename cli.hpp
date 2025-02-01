@@ -9,10 +9,11 @@ namespace args
 enum ArgType
 {
     mode=0,
-    alg=1,
-    archive=2,
-    output=3,
-    fileToAdd=4,
+    alg,
+    archive,
+    output,
+    fileToAdd,
+    blockSize
 };
 } // namespace args
 

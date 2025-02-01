@@ -1,5 +1,3 @@
-import subprocess
-import tempfile
 import os
 import statistics
 import itertools
@@ -38,7 +36,7 @@ gzip= TestRunner(
     max= lambda pathToAdd, archivePath: f'gzip --best --stdout {pathToAdd} > {archivePath}',
     unpack= lambda pathOutput, archivePath: f'gzip --decompress --stdout {archivePath} > {pathOutput}')
 
-tk2kCommandGen = lambda mode, alg, pathToAdd, archivePath: f'{consts.tk2kPath} --mode={mode} --alg={alg} --archive={archivePath} --fileToAdd={pathToAdd}'
+tk2kCommandGen = lambda mode, alg, pathToAdd, archivePath, blockSize="16": f'{consts.tk2kPath} --mode={mode} --alg={alg} --archive={archivePath} --fileToAdd={pathToAdd} --blockSize={blockSize}'
 
 tk2k= TestRunner(
     name = 'tk2k',
@@ -46,9 +44,9 @@ tk2k= TestRunner(
     max= lambda pathToAdd, archivePath: tk2kCommandGen(mode='compress', alg='2', pathToAdd=pathToAdd, archivePath=archivePath),
     unpack= lambda pathOutput, archivePath: f'{consts.tk2kPath} --mode=decompress --archive={archivePath} --output={pathOutput}')
 
-tk2kRunnerGen = lambda alg: TestRunner(
-    name = f'tk2k_{alg}',
-    default= lambda pathToAdd, archivePath: tk2kCommandGen(mode='compress', alg=alg, pathToAdd=pathToAdd, archivePath=archivePath),
+tk2kRunnerXmb = lambda alg, blockSize: TestRunner(
+    name = f'{alg}\t{blockSize}',
+    default= lambda pathToAdd, archivePath: tk2kCommandGen(mode='compress', alg=alg, pathToAdd=pathToAdd, archivePath=archivePath, blockSize=blockSize),
     max= None,
     unpack= lambda pathOutput, archivePath: f'{consts.tk2kPath} --mode=decompress --alg={alg} --archive={archivePath} --output={pathOutput}')
 
@@ -57,39 +55,27 @@ def makeExperimentalTk2kRunners():
     combinations = []
     for i in range(len(toReorder)+1):
         combinations += list(itertools.permutations(toReorder,i))
-    # l = list(itertools.permutations(toReorder,3))
-    # print(combinations)
+
     algList = []
+    # for comb in combinations:
+        # algList += ['+'.join(comb)]
+
     for comb in combinations:
-        algList += ['+'.join(comb)]
+        algList += ['+'.join(list(comb) + ['AC'])]
 
     for comb in combinations:
         algList += ['+'.join(list(comb) + ['AC2'])]
     print(algList)
+    # blockList = ['1', '0.5', '0.25', '0.125']
+    blockList = ['2', '8', '16']
     runners = []
-    for alg in algList:
-        runners.append(tk2kRunnerGen(alg=alg))
+    for block in blockList:
+        for alg in algList:
+            runners.append(tk2kRunnerXmb(alg=alg, blockSize=block))
     return runners
 
-        
-
-# ~/repos/Turbo-Kompresor-2000/builds/build-Turbo-Kompresor-2000-Desktop-Release/Turbo-Kompresor-2000 --mode=compress --alg=1 --archive=../testFiles/packedDefault.res --fileToAdd=../testFiles/male/alice29.txt
-# --mode=decompress --archive=../testFiles/packedDefault.res --output=../testFiles/unpacked
 allRunners = [zip, _7zip, bzip2, rar, gzip, tk2k]
-# bzip2 --keep --stdout male/alice29.txt > compressed.res
-# bzip2 --decompress --stdout compressed.res > decompressed
 
-# def gatherResults(
-#         commands,  # list of commands
-#         filePaths, # list of files
-#         amount=10):
-#     print('\t' + '\t'.join([os.path.basename(path) for path in filePaths]))
-#     for cmd in commands:
-#         print(cmd, end='\t')
-#         for path in filePaths:
-#             result = getTimings(cmd, path, amount)
-#             print(result, end='\t')
-#         print()
 
 
 def getTimings(cmd, path, amount):
@@ -99,12 +85,20 @@ def getTimings(cmd, path, amount):
         compressionResults.append(testExecutionTime(fullCommand))
     return round(statistics.fmean(compressionResults))
 
+def printProgressCounter(current, max):
+    print(f'===== Postep: {current}/{max} =====')
 
 def gatherResults(testRunners, filePaths, amount=10):
+    total_ops = len(filePaths) * len(testRunners)
+    current_counter = 0
     for path in filePaths:
         for runner in testRunners:
+            printProgressCounter(current_counter, total_ops)
             runner.runTest(cmdType=consts.CmdType.DEFAULT, filePath=path, amount=amount)
             runner.runTest(cmdType=consts.CmdType.MAX, filePath=path, amount=amount)
+            current_counter += 1
+        report = makeTk2kResultString(testRunners, path)
+        writeTk2kResult(report, path)
 
 def runTests(testRunners, filePaths):
     for runner in testRunners:
@@ -115,8 +109,8 @@ def runTests(testRunners, filePaths):
 def makeTimeTable(runners, filePaths):
     return makeResultsTableForRunners(runners=runners, filePaths=filePaths, valueGetter=TestRunner.getTime)
 
-def makeEffectTable(runners, filePaths):
-    return makeResultsTableForRunners(runners=runners, filePaths=filePaths, valueGetter=TestRunner.getEffect)
+def makeSizeTable(runners, filePaths):
+    return makeResultsTableForRunners(runners=runners, filePaths=filePaths, valueGetter=TestRunner.getSize)
 
 def makeResultsTableForRunners(runners, filePaths, valueGetter):
     output = '\t' + '\t'.join([os.path.basename(path) for path in filePaths]) + '\n'
@@ -155,7 +149,48 @@ def makeResultsLine(runner, cmdType, cmdMode, filePaths, valueGetter):
 
 
 
+def makeTk2kResultsHeader(runner, filePath):
+    output = f'\t\t{os.path.basename(filePath)}\trozmiar_pierwotny:\t{runner.getSize(cmdType=consts.CmdType.DEFAULT, cmdMode=consts.CmdMode.UNPACK, filePath=filePath)}\n'
+    output += f'algorytm\trozmiar_bloku\tczas_pakowania\tczas_rozpakowania\trozmiar_spakowany\tram_pakowania\tram_rozpakowania\n'
+    return output
+
+
+def makeTk2kResultsLine(runner, filePath):
+    output = [runner.name]
+    output += [f'{runner.getTime(cmdType=consts.CmdType.DEFAULT, cmdMode=consts.CmdMode.PACK, filePath=filePath)}']
+    output += [f'{runner.getTime(cmdType=consts.CmdType.DEFAULT, cmdMode=consts.CmdMode.UNPACK, filePath=filePath)}']
+    
+    output += [f'{runner.getSize(cmdType=consts.CmdType.DEFAULT, cmdMode=consts.CmdMode.PACK, filePath=filePath)}']
+    # output += [f'{runner.getSize(cmdType=consts.CmdType.DEFAULT, cmdMode=consts.CmdMode.PACK, filePath=filePath) / runner.getSize(cmdType=consts.CmdType.DEFAULT, cmdMode=consts.CmdMode.UNPACK, filePath=filePath)}']
+
+    output += [f'{runner.getRamUsage(cmdType=consts.CmdType.DEFAULT, cmdMode=consts.CmdMode.PACK, filePath=filePath)}']
+    output += [f'{runner.getRamUsage(cmdType=consts.CmdType.DEFAULT, cmdMode=consts.CmdMode.UNPACK, filePath=filePath)}']
+    return '\t'.join(output) + '\n'
+
+
+def makeTk2kResultString(runners, filePath):
+    output = makeTk2kResultsHeader(runners[0], filePath)
+    for runner in runners:
+        output += makeTk2kResultsLine(runner, filePath)
+    return output + '\n'
+
+
+def writeTk2kResult(outputString, filePath):
+    with open(f"wyniki/tk2k_{os.path.basename(filePath)}.txt", "w") as f:
+        f.write(outputString)
+
+
+
+def saveTk2kResults(runners, filePaths):
+    for path in filePaths:
+        report = makeTk2kResultString(runners, path)
+        writeTk2kResult(report, path)
+
+
+
+
 runnersToRun = []
+# runnersToRun = []
 # runnersToRun += [zip]
 # runnersToRun += [_7zip]
 # runnersToRun += [bzip2]
@@ -169,28 +204,34 @@ filesToMeasure = []
 # filesToMeasure += getFilePathsFromFolder(consts.malePath)
 # filesToMeasure += getFilePathsFromFolder(consts.sredniePath)
 # filesToMeasure += getFilePathsFromFolder(consts.duzePath)
+# filesToMeasure += getFilePathsFromFolder(consts.bardzoDuzePath)
 
-testFile = '../testFiles/male/alice29.txt'
-# filesToMeasure += [testFile]
-filesToMeasure += ['/home/pc/Desktop/testFiles/srednie/mozilla']
+filesToMeasure += ['/home/pc/Desktop/testFiles/male/alice29.txt']
+# filesToMeasure += ['/home/pc/Desktop/testFiles/srednie/mozilla']
+# filesToMeasure += ['/home/pc/Desktop/testFiles/srednie/x-ray']
 
-# fullCommand = '7z'
-# testExecutionTime(fullCommand)
-# zip, _7zip
 
-runnersToRun = makeExperimentalTk2kRunners()
+def testTk2k():
+    runnersToRun = makeExperimentalTk2kRunners()
+    gatherResults(testRunners = runnersToRun, filePaths = filesToMeasure, amount=3)
+    saveTk2kResults(runners=runnersToRun, filePaths=filesToMeasure)
+
 
 def main():
-    gatherResults(testRunners = runnersToRun, filePaths = filesToMeasure, amount=1)
+    gatherResults(testRunners = runnersToRun, filePaths = filesToMeasure, amount=3)
     times = makeTimeTable(runnersToRun, filesToMeasure)
-    effects = makeEffectTable(runnersToRun, filesToMeasure)
-    with open("results.txt", "w") as f:
+    effects = makeSizeTable(runnersToRun, filesToMeasure)
+    with open("wyniki/tk2k_enwik9.txt", "w") as f:
         f.write(times)
         f.write(effects)
     print(times)
     print(effects)
 
-main()
+
+
+
+# main()
+testTk2k()
 # runTests(runnersToRun, filesToMeasure)
 
 

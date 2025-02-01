@@ -3,24 +3,28 @@ import consts
 
 class Results:
     def __init__(self):
-        # self._testCount = 0
-        # self._results = {consts.CmdMode.PACK: [], consts.CmdMode.UNPACK: []}
         self._timePack = 999999999999999
         self._timeUnpack = 999999999999999
         self._sizeBase = -1
         self._sizePacked = -1
+        self._ramUsagePack = 999999999999999
+        self._ramUsageUnpack = 999999999999999
 
 
-    def addResults(self, packResult, unpackResult):
+    def addTimes(self, packResult, unpackResult):
         if self._timePack > packResult:
             self._timePack = packResult
         
         if self._timeUnpack > unpackResult:
             self._timeUnpack = unpackResult
+
+    
+    def addRamUsage(self, packResult, unpackResult):
+        if self._ramUsagePack > packResult:
+            self._ramUsagePack = packResult
         
-        # self._results[consts.CmdMode.PACK].append(packResult)
-        # self._results[consts.CmdMode.UNPACK].append(unpackResult)
-        # self._testCount += 1
+        if self._ramUsageUnpack > unpackResult:
+            self._ramUsageUnpack = unpackResult
 
 
     def setBaseSize(self, size):
@@ -38,9 +42,14 @@ class Results:
     def getTime(self, cmdMode):
         return self._getTimeMin(cmdMode)
     
-    def getEffectiveness(self):
-        return round(self._sizePacked * 100 / self._sizeBase, ndigits=1)
-
+    # def getEffectiveness(self):
+    #     return round(self._sizePacked * 100 / self._sizeBase, ndigits=1)
+    
+    def getRamUsage(self, cmdMode):
+        if cmdMode == consts.CmdMode.PACK:
+            return self._ramUsagePack
+        else:
+            return self._ramUsageUnpack
 
     def _getTimeMin(self, cmdMode):
         if cmdMode == consts.CmdMode.PACK:

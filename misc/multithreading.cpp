@@ -64,32 +64,32 @@ inline void compressIfNeeded(
         {
             case AlgorithmFlag::BWT:
             comp->BWT_make();
-            std::cout << "BWT_make ";
+            // std::cout << "BWT_make ";
             break;
 
             case AlgorithmFlag::BWT2:
             comp->BWT_make2();
-            std::cout << "BWT_make2 ";
+            // std::cout << "BWT_make2 ";
             break;
 
             case AlgorithmFlag::MTF:
             comp->MTF_make();
-            std::cout << "MTF_make ";
+            // std::cout << "MTF_make ";
             break;
 
             case AlgorithmFlag::RLE:
             comp->RLE_makeV2();
-            std::cout << "RLE_makeV2 ";
+            // std::cout << "RLE_makeV2 ";
             break;
 
             case AlgorithmFlag::AC:
             comp->AC_make();
-            std::cout << "AC_make ";
+            // std::cout << "AC_make ";
             break;
 
             case AlgorithmFlag::AC2:
             comp->AC2_make();
-            std::cout << "AC2_make ";
+            // std::cout << "AC2_make ";
             break;
         }
         incrementProgressCtr(progressCounterPtr);
@@ -465,6 +465,7 @@ inline void decompressIfNeeded(
         if ( bin_flags[10] ) block_size >>= 2;
         if ( bin_flags[11] ) block_size >>= 4;
         if ( bin_flags[12] ) block_size >>= 8;
+        std::cout << "\n block size from flags: " << block_size << "\n";
 
         uint32_t block_count = ceill((long double)original_size / block_size);
         if (block_count == 1) block_size = original_size;
@@ -472,6 +473,7 @@ inline void decompressIfNeeded(
             block_count = 1;
             block_size = 0;
         }
+        
 
         // preparing vector of empty Compression objects for threads
         std::vector<Compression*> comp_v;

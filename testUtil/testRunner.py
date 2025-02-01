@@ -52,22 +52,30 @@ def getPackedFilePath(cmdType):
         raise ValueError(f"cmdType not recognized, value: {cmdType}")
 
 
-def testExecutionTime(command):
-    with tempfile.TemporaryFile() as tempf: 
-        timedCommand = f't1=$(date +%s%6N) ; {command} ; t2=$(date +%s%6N) ; echo ; echo $((t2-t1))'
-        # timedCommand = f't1=$(date +%s%6N) ; {command} ; t2=$(date +%s%6N) ; echo $((t2-t1))'
-        # print("TIMED COMMAND:")
-        # print(timedCommand)
-        subprocess.run(timedCommand, shell=True, executable="/bin/bash", stderr=tempf, stdout=tempf)
+def runInBashAndGetResult(command):
+    print(f"========== starting command: {command} ==========")
+    with tempfile.TemporaryFile() as tempf:
+        subprocess.run(command, shell=True, executable="/bin/bash", stderr=tempf, stdout=tempf)
         tempf.seek(0)
         output = str(tempf.read())
-        print()
+        # print()
         print(output)
-        print()
+        # print()
         return int(output.split('\\n')[-2])
+
+def testExecutionTime(command):
+    timedCommand = f't1=$(date +%s%6N) ; {command} ; t2=$(date +%s%6N) ; echo ; echo $((t2-t1))'
+    return runInBashAndGetResult(timedCommand)
+
+def testPeakRamUsage(command):
+    measuredCommand = f'/usr/bin/time -f "%M" {command}'
+    return runInBashAndGetResult(measuredCommand)
 
 def getFileSize(filepath):
     return os.path.getsize(filepath)
+
+def printRoundCounter(i, max):
+    print(f'cmd left: {i}/{max}')
 
 class TestRunner:
     def __init__(self, name, default, max, unpack):
@@ -93,27 +101,29 @@ class TestRunner:
             return self._results[cmdType][filePath].getTime(cmdMode)
         raise ValueError(f"getTime: something's missing, values: cmdType: {cmdType}, cmdMode: {cmdMode}, filePath: {filePath}")
     
-    def getEffect(self, cmdType, cmdMode, filePath):
+    def getSize(self, cmdType, cmdMode, filePath):
         if self._results[cmdType][filePath]:
             if cmdMode == consts.CmdMode.UNPACK:
                 return self._results[cmdType][filePath].getBaseSize()
             return self._results[cmdType][filePath].getPackedSize()
-        raise ValueError(f"getEffect: something's missing, values: cmdType: {cmdType}, cmdMode: {cmdMode}, filePath: {filePath}")
+        raise ValueError(f"getSize: something's missing, values: cmdType: {cmdType}, cmdMode: {cmdMode}, filePath: {filePath}")
 
+    def getRamUsage(self, cmdType, cmdMode, filePath):
+        if self._results[cmdType][filePath]:
+            return self._results[cmdType][filePath].getRamUsage(cmdMode)
+        raise ValueError(f"getRamUsage: something's missing, values: cmdType: {cmdType}, cmdMode: {cmdMode}, filePath: {filePath}")
 
     def runTest(self, cmdType, filePath, amount):
         if self._cmd[cmdType]:
             self._runCmd(cmdType=cmdType, filePath=filePath, amount=amount)
-        else:
-            print(f"self._cmd[consts.CmdType.{cmdType}] not available!")    
+        # else:
+            # print(f"self._cmd[consts.CmdType.{cmdType}] not available!")
+
 
 
     def _runCmd(self, cmdType, filePath, amount):
-        # print(f"test: self._results[cmdType] = {self._results[cmdType]}")
         if filePath not in self._results[cmdType].keys():
             self._results[cmdType][filePath] = Results()
-            
-            # print(f"test: self._results[cmdType][filePath] = {self._results[cmdType][filePath]}")
         else:
             print("apparently filePath not in self._results[cmdType].keys()")
         
@@ -123,29 +133,31 @@ class TestRunner:
         self._results[cmdType][filePath].setBaseSize(getFileSize(filePath))
 
         self._cleanOutput(cmdType=cmdType)
-        packingTime = self._runTimed(packCmd)
+        packingPeakRamUsage = testPeakRamUsage(packCmd)
         self._results[cmdType][filePath].setPackedSize(getFileSize(getPackedFilePath(cmdType)))
-        unpackingTime = self._runTimed(unpackCmd)
-        self._results[cmdType][filePath].addResults(packingTime, unpackingTime)
+        unpackingPeakRamUsage = testPeakRamUsage(unpackCmd)
+        self._results[cmdType][filePath].addRamUsage(packingPeakRamUsage, unpackingPeakRamUsage)
+        self._verifySuccessfulUnpack(originalFilePath=filePath)
         self._cleanOutput(cmdType=cmdType)
         
-        for _ in range(amount-1):
-            packingTime = self._runTimed(packCmd)
-            unpackingTime = self._runTimed(unpackCmd)
-            self._results[cmdType][filePath].addResults(packingTime, unpackingTime)
+        for round in range(amount):
+            printRoundCounter(round, amount)
+            packingTime = testExecutionTime(packCmd)
+            unpackingTime = testExecutionTime(unpackCmd)
+            self._results[cmdType][filePath].addTimes(packingTime, unpackingTime)
             self._cleanOutput(cmdType=cmdType)
-
-
-    def _runTimed(self, command):
-        print(f"========== starting command: {command} ==========")
-        result = testExecutionTime(command=command)
-        # print(f"========== finished command: {command} ==========")
-        return result
-
+        # printRoundCounter(amount, amount)
 
     def _cleanOutput(self, cmdType):
          removeFile(getPackedFilePath(cmdType))
          removeFile(consts.unpackedArchivePath)
+
+    def findFileInTree(self, fileName):
+        if os.path.isfile(consts.unpackedArchivePath):
+            return consts.unpackedArchivePath
+        else:
+            paths = getRecursiveFilePathsFromFolder(consts.unpackedArchivePath)
+            return findFileInPathList(fileName=fileName, filePaths=paths)
 
     def runCorrectnessTest(self, cmdType, filePath):
         if not self._cmd[cmdType]:
@@ -153,38 +165,33 @@ class TestRunner:
         self._cleanOutput(cmdType=cmdType)
         packCmd = self.getPackCmd(cmdType=cmdType, pathToAdd=filePath)
         unpackCmd = self.getUnpackCmd(cmdType=cmdType)
-        packingTime = self._runTimed(packCmd)
+        packingTime = testExecutionTime(packCmd)
         print(f'packingTime: {packingTime}')
         # input(">>> press enter to continue <<<")
-        unpackingTime = self._runTimed(unpackCmd)
+        unpackingTime = testExecutionTime(unpackCmd)
         print(f'unpackingTime: {unpackingTime}')
 
-        fileName = os.path.basename(filePath)
-        unpackedFilePath = ""
-        if os.path.isfile(consts.unpackedArchivePath):
-            unpackedFilePath = consts.unpackedArchivePath
-        else:
-            paths = getRecursiveFilePathsFromFolder(consts.unpackedArchivePath)
-            
-            unpackedFilePath = findFileInPathList(fileName=fileName, filePaths=paths)
+        
         # print(f"\n\n==MILIKOWI== fileName: {fileName}")
         # for elem in resultPaths:
         #     print(elem)
         # print()
-        self._verifySuccessfulUnpack(beforePath=filePath, afterPath=unpackedFilePath)
+        self._verifySuccessfulUnpack(originalFilePath=filePath)
         # self._cleanOutput(cmdType=cmdType)
 
-        # self._verifySuccessfulUnpack(beforePath=filePath, )
+        # self._verifySuccessfulUnpack(originalFilePath=filePath, )
         
     
 
-    def _verifySuccessfulUnpack(self, beforePath, afterPath):
+    def _verifySuccessfulUnpack(self, originalFilePath):
+        fileName = os.path.basename(originalFilePath)
+        unpackedFilePath=self.findFileInTree(fileName)
         import hashlib
         
         beforeHash = hashlib.sha256()
         afterHash = hashlib.sha256()
         BUF_SIZE = 65536
-        with open(beforePath, 'rb') as f:
+        with open(originalFilePath, 'rb') as f:
             while True:
                 data = f.read(BUF_SIZE)
                 if not data:
@@ -192,7 +199,7 @@ class TestRunner:
                 beforeHash.update(data)
         
 
-        with open(afterPath, 'rb') as f:
+        with open(unpackedFilePath, 'rb') as f:
             while True:
                 data = f.read(BUF_SIZE)
                 if not data:
@@ -201,15 +208,15 @@ class TestRunner:
         beforeDigest = beforeHash.hexdigest()
         afterDigest = afterHash.hexdigest()
         # ------------------------------------------
-        # with open(beforePath, 'rb') as f:
+        # with open(originalFilePath, 'rb') as f:
         #     beforeDigest = hashlib.file_digest(f, "sha256")
-        # with open(afterPath, 'rb') as f:
+        # with open(unpackedFilePath, 'rb') as f:
         #     afterDigest = hashlib.file_digest(f, "sha256")
-        if beforePath == afterPath:
-            raise RuntimeError(f"ERROR: beforePath == afterPath!: \"{beforePath}\"")
-        print(f'beforePath:{beforePath}, afterPath:{afterPath}')
-        print(f'beforeDigest:\t{beforeDigest}\nafterDigest:\t{afterDigest}')
-        print()
+        if originalFilePath == unpackedFilePath:
+            raise RuntimeError(f"ERROR: originalFilePath == unpackedFilePath!: \"{originalFilePath}\"")
+        # print(f'originalFilePath:{originalFilePath}, unpackedFilePath:{unpackedFilePath}')
+        # print(f'beforeDigest:\t{beforeDigest}\nafterDigest:\t{afterDigest}')
+        # print()
         
         if beforeDigest != afterDigest:
             print(f"!!!HASH DOES NOT ADD UP!\nbefore:\t{beforeDigest}\nafter:\t{afterDigest}")
