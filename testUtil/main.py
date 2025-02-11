@@ -3,6 +3,7 @@ import statistics
 import itertools
 
 from testRunner import *
+from ReportGenerator import *
 
 
 zip= TestRunner(
@@ -36,13 +37,13 @@ gzip= TestRunner(
     max= lambda pathToAdd, archivePath: f'gzip --best --stdout {pathToAdd} > {archivePath}',
     unpack= lambda pathOutput, archivePath: f'gzip --decompress --stdout {archivePath} > {pathOutput}')
 
-tk2kCommandGen = lambda mode, alg, pathToAdd, archivePath, blockSize="16": f'{consts.tk2kPath} --mode={mode} --alg={alg} --archive={archivePath} --fileToAdd={pathToAdd} --blockSize={blockSize}'
+tk2kCommandGen = lambda mode, alg, pathToAdd, archivePath, blockSize="16": f'{helpers.tk2kPath} --mode={mode} --alg={alg} --archive={archivePath} --fileToAdd={pathToAdd} --blockSize={blockSize}'
 
 tk2k= TestRunner(
     name = 'tk2k',
     default= lambda pathToAdd, archivePath: tk2kCommandGen(mode='compress', alg='1', pathToAdd=pathToAdd, archivePath=archivePath),
     max= lambda pathToAdd, archivePath: tk2kCommandGen(mode='compress', alg='2', pathToAdd=pathToAdd, archivePath=archivePath),
-    unpack= lambda pathOutput, archivePath: f'{consts.tk2kPath} --mode=decompress --archive={archivePath} --output={pathOutput}',
+    unpack= lambda pathOutput, archivePath: f'{helpers.tk2kPath} --mode=decompress --archive={archivePath} --output={pathOutput}',
     tk2kBlockSize = "16")
 
 
@@ -50,7 +51,7 @@ tk2k_customRunnerGenerator = lambda alg, blockSize: TestRunner(
     name = f'tk2k_{alg}',
     default= lambda pathToAdd, archivePath: tk2kCommandGen(mode='compress', alg=alg, pathToAdd=pathToAdd, archivePath=archivePath, blockSize=blockSize),
     max= None,
-    unpack= lambda pathOutput, archivePath: f'{consts.tk2kPath} --mode=decompress --alg={alg} --archive={archivePath} --output={pathOutput}',
+    unpack= lambda pathOutput, archivePath: f'{helpers.tk2kPath} --mode=decompress --alg={alg} --archive={archivePath} --output={pathOutput}',
     tk2kBlockSize = blockSize,
     tk2kAlgorithm = alg)
 
@@ -96,174 +97,34 @@ def gatherResults(testRunners, filePaths, amount=10):
     for path in filePaths:
         for runner in testRunners:
             printProgressCounter(current_counter, total_ops)
-            runner.runTest(cmdType=consts.CmdType.DEFAULT, filePath=path, amount=amount)
-            runner.runTest(cmdType=consts.CmdType.MAX, filePath=path, amount=amount)
+            runner.runTest(cmdType=helpers.CmdType.DEFAULT, filePath=path, amount=amount)
+            runner.runTest(cmdType=helpers.CmdType.MAX, filePath=path, amount=amount)
             current_counter += 1
 
 
 
 
-def joinStringList(stringList, sep='\t'):
-    return sep.join(map(str, stringList))
-
-
-
-
-def generateOriginalFileSizeTable(filePaths):
-    lines = ["File\tSize [B]"]
-    for path in filePaths:
-        lines += [f"{os.path.basename(path)}\t{getFileSize(path)}"]
-    return joinStringList(lines, sep='\n')
 
 
 
 
 
-class ReportGenerator():
-    def __init__(self):
-        self._headerIdentificationNames = [] # string name to be written on top of column in report
-        self._lineIdentificationGenerators = [] # takes lambdas, that take "TestRunner" object and return string
-
-        self._headerNames = [] # string name to be written on top of column in report
-        self._resultPerFileGenerators = [] # takes lambdas, that take "TestRunner" object and return string
-
-
-        self.addIdentificationColumn(
-            name="program",
-            valueGetter = lambda run, cmdType, filePath: run.name)
-        
-        self.addIdentificationColumn(
-            name="tryb",
-            valueGetter = lambda run, cmdType, filePath: consts.getCmdTypeStr(cmdType))
-
-        # reportGenerator.addColumn(  # (TK2K only)
-        #     name="rozmiar_bloku",
-        #     valueGetter = lambda run: run.tk2kBlockSize if run.tk2kBlockSize is not None else "")
-
-        # reportGenerator.addColumn(  # (TK2K only)
-        #     name="algorytm",
-        #     valueGetter = lambda run: run.tk2kAlgorithm if run.tk2kAlgorithm is not None else "")
-
-
-        self.addColumnPerFile(
-            name="czas_pakowania",
-            valueGetter = lambda run, cmdType, filePath: run.getTime(cmdType=cmdType, cmdMode=consts.CmdMode.PACK, filePath=filePath))
-
-        self.addColumnPerFile(
-            name="czas_rozpakowania",
-            valueGetter = lambda run, cmdType, filePath: run.getTime(cmdType=cmdType, cmdMode=consts.CmdMode.UNPACK, filePath=filePath))
-
-        self.addColumnPerFile(
-            name="rozmiar_spakowany",
-            valueGetter = lambda run, cmdType, filePath: run.getSize(cmdType=cmdType, cmdMode=consts.CmdMode.PACK, filePath=filePath))
-
-        self.addColumnPerFile(
-            name="ram_pakowania",
-            valueGetter = lambda run, cmdType, filePath: run.getRamUsage(cmdType=cmdType, cmdMode=consts.CmdMode.PACK, filePath=filePath))
-
-        self.addColumnPerFile(
-            name="ram_rozpakowania",
-            valueGetter = lambda run, cmdType, filePath: run.getRamUsage(cmdType=cmdType, cmdMode=consts.CmdMode.UNPACK, filePath=filePath))
 
 
 
-    def addColumnPerFile(self, name, valueGetter):
-        self._headerNames += [name]
-        self._resultPerFileGenerators += [valueGetter]
 
+def writeString(stringToSave, folderPath= "wynikiV2/", filename= "output.txt"):
+    
+    os.makedirs(
+        name=folderPath,
+        exist_ok=True)
 
-    def addIdentificationColumn(self, name, valueGetter):
-        self._headerIdentificationNames += [name]
-        self._lineIdentificationGenerators += [valueGetter]
+    outputPath = folderPath + filename
 
+    with open(outputPath, "w") as f:
+        f.write(stringToSave)
 
-
-    def _getReportLine_Filename(self, filePath):
-        line = [os.path.basename(filePath)] * (len(self._resultPerFileGenerators))
-        return joinStringList(line)
-        
-
-    def _getReportLine_OriginalFileSize(self, runner, filePath):
-        originalSize = runner.getSize(cmdType=consts.CmdType.DEFAULT, cmdMode=consts.CmdMode.UNPACK, filePath=filePath)
-        line = [str(originalSize)] * (len(self._resultPerFileGenerators))
-        return joinStringList(line)
-
-
-    def _getReportLine_repeatingColumnNames(self):
-        return joinStringList(self._headerNames)
-
-
-    def _getReportLinesPerFileFromRunner(self, runner, cmdType, filePath):
-        values = []
-
-        for getter in self._resultPerFileGenerators:
-            line = getter( run= runner, cmdType= cmdType, filePath= filePath)
-
-            values += [line]
-
-        return joinStringList(values)
-
-
-    def _getReportLineIdentificationDataFromRunner(self, runner, cmdType, filePath):
-        values = []
-
-        for getter in self._lineIdentificationGenerators:
-            line = getter( run= runner, cmdType= cmdType, filePath= filePath)
-            values += [line]
-
-        return joinStringList(values)
-
-
-    def _getResultsFromRunner(self, runner, cmdType, filePaths):
-        resultsForFile = [self._getReportLineIdentificationDataFromRunner(runner= runner, cmdType= cmdType, filePath= '')]
-
-        for path in filePaths:
-            resultsForFile += [self._getReportLinesPerFileFromRunner(runner= runner, cmdType= cmdType, filePath= path)]
-        
-        return joinStringList(resultsForFile)
-
-
-
-    def _getReportHeaders(self, runner, filePaths):
-        originalSizes = ["", ""]
-        filenames = ["", ""]
-        columnNames = [] + self._headerIdentificationNames
-
-        for path in filePaths:
-            originalSizes += [self._getReportLine_OriginalFileSize(runner=runner, filePath=path)]
-            filenames += [self._getReportLine_Filename(filePath=path)]
-            columnNames += [self._getReportLine_repeatingColumnNames()]
-        
-        return [joinStringList(originalSizes),
-                joinStringList(filenames),
-                joinStringList(columnNames)]
-
-
-    def getReport(self, runners, filePaths):
-        lines = []
-        lines += self._getReportHeaders(runner= runners[0], filePaths= filePaths)
-
-        for runner in runners:
-            for cmdType in consts.CmdType.__members__.values():
-                if runner._cmd[cmdType]:
-                    lines += [self._getResultsFromRunner(runner= runner, cmdType= cmdType, filePaths= filePaths)]
-
-        return joinStringList(lines, '\n')
-
-
-    def generateAmountOfTestRunsStats(self, amount):
-        return f"Amount of test runs of each algorithm:\t{amount}"
-
-
-    def generateFullReport(self, runners, filePaths, amountOfTestRuns):
-        tables = [self.generateAmountOfTestRunsStats(amount=amountOfTestRuns),
-                  generateOriginalFileSizeTable(filePaths=filePaths),
-                  self.getReport(runners=runners, filePaths=filePaths)]
-        
-        return joinStringList(tables, sep="\n\n\n")
-
-
-
+    print(f'File saved, path: "{outputPath}"')
 
 
 runnersToRun = []
@@ -277,11 +138,11 @@ runnersToRun = []
 
 
 filesToMeasure = []
-# filesToMeasure += getFilePathsFromFolder(consts.testFolderPath + "mini")
-# filesToMeasure += getFilePathsFromFolder(consts.malePath)
-# filesToMeasure += getFilePathsFromFolder(consts.sredniePath)
-# filesToMeasure += getFilePathsFromFolder(consts.duzePath)
-# filesToMeasure += getFilePathsFromFolder(consts.bardzoDuzePath)
+# filesToMeasure += getFilePathsFromFolder(helpers.testFolderPath + "mini")
+# filesToMeasure += getFilePathsFromFolder(helpers.malePath)
+# filesToMeasure += getFilePathsFromFolder(helpers.sredniePath)
+# filesToMeasure += getFilePathsFromFolder(helpers.duzePath)
+# filesToMeasure += getFilePathsFromFolder(helpers.bardzoDuzePath)
 
 filesToMeasure += ['/home/pc/Desktop/testFiles/male/alice29.txt']
 # filesToMeasure += ['/home/pc/Desktop/testFiles/srednie/mozilla']
@@ -293,8 +154,8 @@ filesToMeasure += ['/home/pc/Desktop/testFiles/male/alice29.txt']
 def main():
     # myRunners = makeExperimentalTk2kRunners()#[bzip2]#allRunners#[zip, rar]
     myRunners = allRunners
-    # pathsToTest = getFilePathsFromFolder(consts.malePath)
-    pathsToTest = ['/home/pc/Desktop/testFiles/male/alice29.txt']
+    pathsToTest = getFilePathsFromFolder(helpers.malePath)
+    # pathsToTest = ['/home/pc/Desktop/testFiles/male/alice29.txt']
     amountOfTestRuns = 1
 
     gatherResults(testRunners= myRunners, filePaths= pathsToTest, amount=amountOfTestRuns)

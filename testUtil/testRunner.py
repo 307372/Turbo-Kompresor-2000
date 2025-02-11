@@ -4,7 +4,7 @@ import tempfile
 import os
 from pathlib import Path
 
-import consts
+import helpers
 
 
 def getRecursiveFilePathsFromFolder(folderPath):
@@ -44,10 +44,10 @@ def removeDirectory(path):
 
 
 def getPackedFilePath(cmdType):
-    if cmdType == consts.CmdType.DEFAULT:
-        return consts.packedFilePathDefault
-    elif cmdType == consts.CmdType.MAX:
-        return consts.packedFilePathMax
+    if cmdType == helpers.CmdType.DEFAULT:
+        return helpers.packedFilePathDefault
+    elif cmdType == helpers.CmdType.MAX:
+        return helpers.packedFilePathMax
     else:
         raise ValueError(f"cmdType not recognized, value: {cmdType}")
 
@@ -71,18 +71,17 @@ def testPeakRamUsage(command):
     measuredCommand = f'echo ; /usr/bin/time -f "%M" {command}'
     return runInBashAndGetResult(measuredCommand)
 
-def getFileSize(filepath):
-    return os.path.getsize(filepath)
-
 def printRoundCounter(i, max):
     print(f'cmd left: {i}/{max}')
+
+
 
 class TestRunner:
     def __init__(self, name, default, max, unpack, tk2kBlockSize = None, tk2kAlgorithm = None):
         self.name = name
-        self._cmd = {consts.CmdType.DEFAULT: default, consts.CmdType.MAX: max} 
+        self._cmd = {helpers.CmdType.DEFAULT: default, helpers.CmdType.MAX: max} 
         self._unpack = unpack
-        self._results = {consts.CmdType.DEFAULT: {}, consts.CmdType.MAX: {}}
+        self._results = {helpers.CmdType.DEFAULT: {}, helpers.CmdType.MAX: {}}
         self.tk2kBlockSize = tk2kBlockSize
         self.tk2kAlgorithm = tk2kAlgorithm
 
@@ -92,7 +91,7 @@ class TestRunner:
         return self._cmd[cmdType](pathToAdd=pathToAdd, archivePath=archivePath)
     
 
-    def getUnpackCmd(self, cmdType, unpackPath=consts.unpackedArchivePath, archivePath=None):
+    def getUnpackCmd(self, cmdType, unpackPath=helpers.unpackedArchivePath, archivePath=None):
         if archivePath is None:
             archivePath = getPackedFilePath(cmdType)
         return self._unpack(pathOutput=unpackPath, archivePath=archivePath)
@@ -105,7 +104,7 @@ class TestRunner:
     
     def getSize(self, cmdType, cmdMode, filePath):
         if self._results[cmdType][filePath]:
-            if cmdMode == consts.CmdMode.UNPACK:
+            if cmdMode == helpers.CmdMode.UNPACK:
                 return self._results[cmdType][filePath].getBaseSize()
             return self._results[cmdType][filePath].getPackedSize()
         raise ValueError(f"getSize: something's missing, values: cmdType: {cmdType}, cmdMode: {cmdMode}, filePath: {filePath}")
@@ -119,9 +118,9 @@ class TestRunner:
         if self._cmd[cmdType]:
             self._runCmd(cmdType=cmdType, filePath=filePath, amount=amount)
         else:
-            if "bzip2" not in self.name and cmdType == consts.CmdType.MAX:
+            if "bzip2" not in self.name and cmdType == helpers.CmdType.MAX:
                 print(f"================ NOWY ERROR W 'runTest'! ================")
-                print(f"self._cmd[consts.CmdType.{cmdType}] not available!")
+                print(f"self._cmd[helpers.CmdType.{cmdType}] not available!")
 
     def isTk2k(self):
         return "tk2k" in self.name
@@ -139,11 +138,11 @@ class TestRunner:
 
         packCmd = self.getPackCmd(cmdType=cmdType, pathToAdd=filePath)
         unpackCmd = self.getUnpackCmd(cmdType=cmdType)
-        self._results[cmdType][filePath].setBaseSize(getFileSize(filePath))
+        self._results[cmdType][filePath].setBaseSize(helpers.getFileSize(filePath))
 
         self._cleanOutput(cmdType=cmdType)
         packingPeakRamUsage = testPeakRamUsage(packCmd)
-        self._results[cmdType][filePath].setPackedSize(getFileSize(getPackedFilePath(cmdType)))
+        self._results[cmdType][filePath].setPackedSize(helpers.getFileSize(getPackedFilePath(cmdType)))
         unpackingPeakRamUsage = testPeakRamUsage(unpackCmd)
         self._results[cmdType][filePath].addRamUsage(packingPeakRamUsage, unpackingPeakRamUsage)
         self._verifySuccessfulUnpack(originalFilePath=filePath)
@@ -159,13 +158,13 @@ class TestRunner:
 
     def _cleanOutput(self, cmdType):
          removeFile(getPackedFilePath(cmdType))
-         removeFile(consts.unpackedArchivePath)
+         removeFile(helpers.unpackedArchivePath)
 
     def findFileInTree(self, fileName):
-        if os.path.isfile(consts.unpackedArchivePath):
-            return consts.unpackedArchivePath
+        if os.path.isfile(helpers.unpackedArchivePath):
+            return helpers.unpackedArchivePath
         else:
-            paths = getRecursiveFilePathsFromFolder(consts.unpackedArchivePath)
+            paths = getRecursiveFilePathsFromFolder(helpers.unpackedArchivePath)
             return findFileInPathList(fileName=fileName, filePaths=paths)
 
     def runCorrectnessTest(self, cmdType, filePath):

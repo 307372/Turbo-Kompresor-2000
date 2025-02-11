@@ -1,5 +1,5 @@
 # import statistics
-import consts
+import helpers
 
 class Results:
     def __init__(self):
@@ -41,18 +41,16 @@ class Results:
 
     def getTime(self, cmdMode):
         return self._getTimeMin(cmdMode)
-    
-    # def getEffectiveness(self):
-    #     return round(self._sizePacked * 100 / self._sizeBase, ndigits=1)
-    
+
+
     def getRamUsage(self, cmdMode):
-        if cmdMode == consts.CmdMode.PACK:
+        if cmdMode == helpers.CmdMode.PACK:
             return self._ramUsagePack
         else:
             return self._ramUsageUnpack
 
     def _getTimeMin(self, cmdMode):
-        if cmdMode == consts.CmdMode.PACK:
+        if cmdMode == helpers.CmdMode.PACK:
             return self._timePack
         else:
             return self._timeUnpack

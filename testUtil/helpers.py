@@ -1,4 +1,5 @@
 from enum import Enum
+import os
 
 class CmdType(Enum):
     DEFAULT=11111
@@ -13,6 +14,9 @@ class CmdMode(Enum):
     PACK=33333
     UNPACK=44444
 
+
+def getFileSize(filepath):
+    return os.path.getsize(filepath)
 
 
 tk2kPath = '/home/pc/repos/Turbo-Kompresor-2000/builds/build-Turbo-Kompresor-2000-Desktop-Release/Turbo-Kompresor-2000'
