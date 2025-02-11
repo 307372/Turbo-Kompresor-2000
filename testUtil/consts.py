@@ -4,6 +4,11 @@ class CmdType(Enum):
     DEFAULT=11111
     MAX=22222
 
+def getCmdTypeStr(cmdType):
+    return "DEFAULT" if cmdType == CmdType.DEFAULT else "MAX"
+
+
+
 class CmdMode(Enum):
     PACK=33333
     UNPACK=44444

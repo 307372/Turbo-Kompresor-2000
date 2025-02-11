@@ -68,7 +68,7 @@ def testExecutionTime(command):
     return runInBashAndGetResult(timedCommand)
 
 def testPeakRamUsage(command):
-    measuredCommand = f'/usr/bin/time -f "%M" {command}'
+    measuredCommand = f'echo ; /usr/bin/time -f "%M" {command}'
     return runInBashAndGetResult(measuredCommand)
 
 def getFileSize(filepath):
@@ -78,11 +78,13 @@ def printRoundCounter(i, max):
     print(f'cmd left: {i}/{max}')
 
 class TestRunner:
-    def __init__(self, name, default, max, unpack):
+    def __init__(self, name, default, max, unpack, tk2kBlockSize = None, tk2kAlgorithm = None):
         self.name = name
         self._cmd = {consts.CmdType.DEFAULT: default, consts.CmdType.MAX: max} 
         self._unpack = unpack
         self._results = {consts.CmdType.DEFAULT: {}, consts.CmdType.MAX: {}}
+        self.tk2kBlockSize = tk2kBlockSize
+        self.tk2kAlgorithm = tk2kAlgorithm
 
     def getPackCmd(self, cmdType, pathToAdd, archivePath=None):
         if archivePath is None:
@@ -116,9 +118,16 @@ class TestRunner:
     def runTest(self, cmdType, filePath, amount):
         if self._cmd[cmdType]:
             self._runCmd(cmdType=cmdType, filePath=filePath, amount=amount)
-        # else:
-            # print(f"self._cmd[consts.CmdType.{cmdType}] not available!")
+        else:
+            if "bzip2" not in self.name and cmdType == consts.CmdType.MAX:
+                print(f"================ NOWY ERROR W 'runTest'! ================")
+                print(f"self._cmd[consts.CmdType.{cmdType}] not available!")
 
+    def isTk2k(self):
+        return "tk2k" in self.name
+
+    # def hasCmd(self, cmdType):
+    #     return self._cmd[cmdType]
 
 
     def _runCmd(self, cmdType, filePath, amount):
@@ -220,5 +229,5 @@ class TestRunner:
         
         if beforeDigest != afterDigest:
             print(f"!!!HASH DOES NOT ADD UP!\nbefore:\t{beforeDigest}\nafter:\t{afterDigest}")
-
+        print(f"verifySuccessfulUnpack successful for {fileName}")
 
