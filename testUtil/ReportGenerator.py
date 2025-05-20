@@ -7,22 +7,15 @@ def joinStringList(stringList, sep='\t'):
 
 
 
-
-def generateOriginalFileSizeTable(filePaths):
-    lines = ["File\tSize [B]"]
-    for path in filePaths:
-        lines += [f"{os.path.basename(path)}\t{helpers.getFileSize(path)}"]
-    return joinStringList(lines, sep='\n')
-
-
-
 class ReportGenerator():
     def __init__(self):
-        self._headerIdentificationNames = [] # string name to be written on top of column in report
-        self._lineIdentificationGenerators = [] # takes lambdas, that take "TestRunner" object and return string
+        self._runIdentHeaders = [] # string name to be written on top of column in report
+        self._runIdentGetters = [] # takes lambdas, that take "TestRunner" object and return string
+        # said string contains info that allows us to identify what run we're checking the results for
 
-        self._headerNames = [] # string name to be written on top of column in report
-        self._resultPerFileGenerators = [] # takes lambdas, that take "TestRunner" object and return string
+        self._partialHeaderNames = [] # string name to be written on top of column in report with file name attached
+        self._testResultGetters = []      # takes lambdas, that take "TestRunner" object and return string
+        # said string contains test results for a given run
 
 
         self.addIdentificationColumn(
@@ -61,113 +54,99 @@ class ReportGenerator():
         self.addColumnPerFile(
             name="ram_rozpakowania",
             valueGetter = lambda run, cmdType, filePath: run.getRamUsage(cmdType=cmdType, cmdMode=helpers.CmdMode.UNPACK, filePath=filePath))
-        
-        self.getCompEffectiveness = lambda run, cmdType, filePath: run.getSize(cmdType=cmdType, cmdMode=helpers.CmdMode.PACK, filePath=filePath) / run.getSize(cmdType=helpers.CmdType.DEFAULT, cmdMode=helpers.CmdMode.UNPACK, filePath=filePath)
-        # compression effectiveness = rozmiar_spakowany / rozmiar_pierwotny [bez jednostki]
-        
-        self.getProcessingSpeed = lambda run, cmdType, filePath: run.getSize(cmdType=helpers.CmdType.DEFAULT, cmdMode=helpers.CmdMode.UNPACK, filePath=filePath) / (run.getTime(cmdType=cmdType, cmdMode=helpers.CmdMode.PACK, filePath=filePath) + run.getTime(cmdType=cmdType, cmdMode=helpers.CmdMode.UNPACK, filePath=filePath))
-        # processing speed = rozmiar_pierwotny / (czas_pakowania+czas_rozpakowania)  [bajt / mikrosekunde]
-
-        kilobytesToBytesMultiplier = 1000
-        self.getRamEfficiency = lambda run, cmdType, filePath: (run.getRamUsage(cmdType=cmdType, cmdMode=helpers.CmdMode.PACK, filePath=filePath) + run.getRamUsage(cmdType=cmdType, cmdMode=helpers.CmdMode.UNPACK, filePath=filePath)) * kilobytesToBytesMultiplier / run.getSize(cmdType=helpers.CmdType.DEFAULT, cmdMode=helpers.CmdMode.UNPACK, filePath=filePath)
-        # ram efficiency = (ram_pakowania + ram_rozpakowania) * kilobytesToBytesMultiplier / rozmiar_pierwotny [bez jednostki]
-
-                
 
 
     def addColumnPerFile(self, name, valueGetter):
-        self._headerNames += [name]
-        self._resultPerFileGenerators += [valueGetter]
+        self._partialHeaderNames += [name]
+        self._testResultGetters += [valueGetter]
 
 
     def addIdentificationColumn(self, name, valueGetter):
-        self._headerIdentificationNames += [name]
-        self._lineIdentificationGenerators += [valueGetter]
+        self._runIdentHeaders += [name]
+        self._runIdentGetters += [valueGetter]
 
 
-    def _getReportLine_repeatingFileNames(self, filename): # for ease of use with excel
-        line = [filename] * (len(self._resultPerFileGenerators))
-        return joinStringList(line)
-        
-
-    def _getReportLine_OriginalFileSize(self, runner, filePath):
-        originalSize = runner.getSize(cmdType=helpers.CmdType.DEFAULT, cmdMode=helpers.CmdMode.UNPACK, filePath=filePath)
-        line = [str(originalSize)] * (len(self._resultPerFileGenerators))
-        return joinStringList(line)
+    def getRepeatedFileNames(self, filename, amount=None): # for ease of use with excel
+        if amount is None:
+            amount = len(self._testResultGetters)
+         
+        return joinStringList([filename] * amount)
 
 
-    def _getReportLine_repeatingColumnNames(self, filename):
-        namesWithFilename = [f"{filename}_{name}" for name in self._headerNames]
-        return joinStringList(namesWithFilename)
+    def getPrependedFileNameToColumnNames(self, filename):
+        fileName_columnNames = [f"{filename}_{columnName}" for columnName in self._partialHeaderNames]
+        return joinStringList(fileName_columnNames)
 
-
-    def _getReportLinesPerFileFromRunner(self, runner, cmdType, filePath):
+    # testcase = Wiemy co za algorytm, jak skonfigurowany i na jakim pliku byl uruchamiany
+    # jest to wiedza wystarczajaca do zidentyfikowania testu
+    def getTestcaseData(self, runner, cmdType, filePath):
         values = []
-
-        for getter in self._resultPerFileGenerators:
-            line = getter( run= runner, cmdType= cmdType, filePath= filePath)
-
-            values += [line]
+        for getter in self._testResultGetters:
+            values += [getter(run=runner, cmdType=cmdType, filePath=filePath)]
 
         return joinStringList(values)
 
 
-    def _getReportLineIdentificationDataFromRunner(self, runner, cmdType, filePath):
+    def getProgramNameAndProfile(self, runner, cmdType, filePath):
         values = []
 
-        for getter in self._lineIdentificationGenerators:
-            line = getter( run= runner, cmdType= cmdType, filePath= filePath)
+        for getter in self._runIdentGetters:
+            line = getter(run=runner, cmdType=cmdType, filePath=filePath)
             values += [line]
 
         return joinStringList(values)
 
+    # class RawReportGenerator(): #ReportGenerator
+    #     pass TODO: make rawReport and processed reports separate objects?
 
-    def _getRawResultsFromRunner(self, runner, cmdType, filePaths):
-        resultsForFile = [self._getReportLineIdentificationDataFromRunner(runner= runner, cmdType= cmdType, filePath= '')]
 
+    def getLinesOfRawTestcaseData(self, runner, cmdType, filePaths):
+        resultsForFile = [self.getProgramNameAndProfile(runner=runner, cmdType=cmdType, filePath='')]
         for path in filePaths:
-            resultsForFile += [self._getReportLinesPerFileFromRunner(runner= runner, cmdType= cmdType, filePath= path)]
-        
+            resultsForFile += [self.getTestcaseData(runner=runner, cmdType=cmdType, filePath=path)]
         return joinStringList(resultsForFile)
 
+        # filling raw report horizontally
+        # a = namedtuple('TestId', ['runner', 'cmdtype', 'filepath'])
+        # from collections import namedtuple
+        # TestId = namedtuple('TestId', ['runner', 'cmdType', 'filePath'])
+        # identification = TestId(runner=runner, cmdType=cmdType, filePath=path)
+        #(*identification)] works
 
-
-    def _generateRawReportHeaders(self, filePaths):
-        columnNames = [] + self._headerIdentificationNames
-        filenames = [] + self._headerIdentificationNames
+    def generateHeadersForRawReport(self, filePaths):
+        columnNames = [] + self._runIdentHeaders
+        filenames = [] + self._runIdentHeaders
         
         for path in filePaths:
-            columnNames += [self._getReportLine_repeatingColumnNames(filename=os.path.basename(path))]
-            filenames += [self._getReportLine_repeatingFileNames(filename=os.path.basename(path))]
+            columnNames += [self.getPrependedFileNameToColumnNames(filename=os.path.basename(path))]
+            filenames += [self.getRepeatedFileNames(filename=os.path.basename(path))] # for the benefit of excel only
         
         return [joinStringList(columnNames),
                 joinStringList(filenames)]
 
 
-
-
     def generateRawReport(self, runners, filePaths):
         lines = []
-        lines += self._generateRawReportHeaders(filePaths= filePaths)
+        lines += self.generateHeadersForRawReport(filePaths= filePaths)
 
         for runner in runners:
             for cmdType in helpers.CmdType.__members__.values():
-                if runner._cmd[cmdType]: #run, cmdType, filePath
-                    lines += [self._getRawResultsFromRunner(runner= runner, cmdType= cmdType, filePaths= filePaths)]
+                if runner._cmd[cmdType]:
+                    lines += [self.getLinesOfRawTestcaseData(runner= runner, cmdType= cmdType, filePaths= filePaths)]
 
         return joinStringList(lines, '\n')
 
 
-    def _generateProcessedReportHeaders(self, filePaths):
-        filenames = [] + self._headerIdentificationNames
+    def generateHeadersForProcessedReport(self, filePaths):
+        filenames = [] + self._runIdentHeaders
         for path in filePaths:
-            filenames += [os.path.basename(path)] #filename
+            filenames += [os.path.basename(path)]
 
         return [joinStringList(filenames)]
 
 
-    def _getProcessedResultsFromRunner(self, runner, cmdType, filePaths, getter):
-        resultsForFile = [self._getReportLineIdentificationDataFromRunner(runner= runner, cmdType= cmdType, filePath= '')]
+    def getProcessedTestcaseData(self, runner, cmdType, filePaths, getter):
+        resultsForFile = [self.getProgramNameAndProfile(runner= runner, cmdType= cmdType, filePath= '')]
 
         for path in filePaths:
             resultsForFile += [getter(run= runner, cmdType= cmdType, filePath= path)]
@@ -177,13 +156,13 @@ class ReportGenerator():
 
     def generateProcessedReport(self, runners, filePaths, getter):
         lines = []
-        lines += self._generateProcessedReportHeaders(filePaths= filePaths)
+        lines += self.generateHeadersForProcessedReport(filePaths= filePaths)
 
         for runner in runners:
             for cmdType in helpers.CmdType.__members__.values():
                 if runner._cmd[cmdType]:
         #####################################################################
-                    lines += [self._getProcessedResultsFromRunner(runner= runner, cmdType= cmdType, filePaths= filePaths, getter=getter)]
+                    lines += [self.getProcessedTestcaseData(runner= runner, cmdType= cmdType, filePaths= filePaths, getter=getter)]
 
         return joinStringList(lines, '\n')
 
@@ -192,14 +171,52 @@ class ReportGenerator():
         return f"Amount of test runs of each algorithm:\t{amount}"
 
 
+    def generateOriginalFileSizeTable(self, filePaths):
+        lines = ["File\tSize [B]"]
+        for path in filePaths:
+            lines += [f"{os.path.basename(path)}\t{helpers.getFileSize(path)}"]
+        return joinStringList(lines, sep='\n')
+
+
+    def generateCompressionEffectivenessReport(self, runners, filePaths):
+            getCompEffectiveness = lambda run, cmdType, filePath: run.getSize(cmdType=cmdType, cmdMode=helpers.CmdMode.PACK, filePath=filePath) / run.getSize(cmdType=helpers.CmdType.DEFAULT, cmdMode=helpers.CmdMode.UNPACK, filePath=filePath)
+            # compression effectiveness = rozmiar_spakowany / rozmiar_pierwotny [bez jednostki]
+            return "CompressionEffectivenessReport\n" +\
+                    self.generateProcessedReport(runners=runners, 
+                                                filePaths=filePaths,
+                                                getter=getCompEffectiveness)
+    
+
+    def generateProcessingSpeedReport(self, runners, filePaths):
+        getProcessingSpeed = lambda run, cmdType, filePath: run.getSize(cmdType=helpers.CmdType.DEFAULT, cmdMode=helpers.CmdMode.UNPACK, filePath=filePath) / (run.getTime(cmdType=cmdType, cmdMode=helpers.CmdMode.PACK, filePath=filePath) + run.getTime(cmdType=cmdType, cmdMode=helpers.CmdMode.UNPACK, filePath=filePath))
+        # processing speed = rozmiar_pierwotny / (czas_pakowania+czas_rozpakowania)  [bajt / mikrosekunde]
+        return "ProcessingSpeedReport\n" +\
+                self.generateProcessedReport(runners=runners, 
+                                            filePaths=filePaths,
+                                            getter=getProcessingSpeed)
+
+
+    def generateRamEfficiencyReport(self, runners, filePaths):
+        kilobytesToBytesMultiplier = 1000
+        getRamEfficiency = lambda run, cmdType, filePath: (run.getRamUsage(cmdType=cmdType, cmdMode=helpers.CmdMode.PACK, filePath=filePath) + run.getRamUsage(cmdType=cmdType, cmdMode=helpers.CmdMode.UNPACK, filePath=filePath)) * kilobytesToBytesMultiplier / run.getSize(cmdType=helpers.CmdType.DEFAULT, cmdMode=helpers.CmdMode.UNPACK, filePath=filePath)
+        # ram efficiency = (ram_pakowania + ram_rozpakowania) * kilobytesToBytesMultiplier / rozmiar_pierwotny [bez jednostki]
+
+        return "RamEfficiencyReport\n" +\
+                self.generateProcessedReport(runners=runners, 
+                                            filePaths=filePaths,
+                                            getter=getRamEfficiency)
+
+
     def generateFullReport(self, runners, filePaths, amountOfTestRuns):
         tables = [
             self.generateAmountOfTestRunsStats(amount=amountOfTestRuns),
-            generateOriginalFileSizeTable(filePaths=filePaths),
+            self.generateOriginalFileSizeTable(filePaths=filePaths),
             self.generateRawReport(runners=runners, filePaths=filePaths),
-            "getCompEffectiveness\n" + self.generateProcessedReport(runners=runners, filePaths=filePaths, getter=self.getCompEffectiveness),
-            "getProcessingSpeed\n" + self.generateProcessedReport(runners=runners, filePaths=filePaths, getter=self.getProcessingSpeed),
-            "getRamEfficiency\n" + self.generateProcessedReport(runners=runners, filePaths=filePaths, getter=self.getRamEfficiency)]
+
+            self.generateCompressionEffectivenessReport(runners, filePaths),
+            self.generateProcessingSpeedReport(runners, filePaths),
+            self.generateRamEfficiencyReport(runners, filePaths)
+            ]
         
         return joinStringList(tables, sep="\n\n\n")
 
