@@ -9,6 +9,9 @@ def getCmdTypeStr(cmdType):
     return "DEFAULT" if cmdType == CmdType.DEFAULT else "MAX"
 
 
+def joinStringList(stringList, sep='\t'):
+    return sep.join(map(str, stringList))
+
 
 class CmdMode(Enum):
     PACK=33333
