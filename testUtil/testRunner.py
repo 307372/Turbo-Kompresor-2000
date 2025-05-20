@@ -69,6 +69,7 @@ def testExecutionTime(command):
 
 def testPeakRamUsage(command):
     measuredCommand = f'echo ; /usr/bin/time -f "%M" {command}'
+    # M      Maximum resident set size of the process during its lifetime, in Kilobytes.
     return runInBashAndGetResult(measuredCommand)
 
 def printRoundCounter(i, max):

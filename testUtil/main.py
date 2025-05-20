@@ -144,7 +144,7 @@ filesToMeasure = []
 # filesToMeasure += getFilePathsFromFolder(helpers.duzePath)
 # filesToMeasure += getFilePathsFromFolder(helpers.bardzoDuzePath)
 
-filesToMeasure += ['/home/pc/Desktop/testFiles/male/alice29.txt']
+# filesToMeasure += ['/home/pc/Desktop/testFiles/male/alice29.txt']
 # filesToMeasure += ['/home/pc/Desktop/testFiles/srednie/mozilla']
 # filesToMeasure += ['/home/pc/Desktop/testFiles/srednie/x-ray']
 
@@ -153,13 +153,19 @@ filesToMeasure += ['/home/pc/Desktop/testFiles/male/alice29.txt']
 
 def main():
     # myRunners = makeExperimentalTk2kRunners()#[bzip2]#allRunners#[zip, rar]
-    myRunners = allRunners
-    pathsToTest = getFilePathsFromFolder(helpers.malePath)
-    # pathsToTest = ['/home/pc/Desktop/testFiles/male/alice29.txt']
+    # folderWithTestFiles = helpers.sredniePath
+    # folderWithTestFiles = helpers.malePath
+    
+    myRunners = [zip, rar] #allRunners
+    # filesToMeasure = getFilePathsFromFolder(folderWithTestFiles)
+
+    # pathsToTest = getFilePathsFromFolder(helpers.malePath)
+    filesToMeasure = ['/home/pc/Desktop/testFiles/male/alice29.txt',
+                      '/home/pc/Desktop/testFiles/male/asyoulik.txt']
     amountOfTestRuns = 1
 
-    gatherResults(testRunners= myRunners, filePaths= pathsToTest, amount=amountOfTestRuns)
-    report = ReportGenerator().generateFullReport(runners= myRunners, filePaths= pathsToTest, amountOfTestRuns= amountOfTestRuns)
-    writeString(stringToSave=report, filename="male.txt")
+    gatherResults(testRunners= myRunners, filePaths= filesToMeasure, amount=amountOfTestRuns)
+    report = ReportGenerator().generateFullReport(runners= myRunners, filePaths= filesToMeasure, amountOfTestRuns= amountOfTestRuns)
+    writeString(stringToSave=report, filename="EXPERIMENTAL.txt")#filename=f"experimental_{os.path.basename(folderWithTestFiles)}.txt")
 
 main()
